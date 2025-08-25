@@ -39,7 +39,7 @@ async function testConnection() {
       tcp(),
       webSockets()
     ],
-    connectionEncryption: [noise()],
+    connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
     services: {
       identify: identify()
