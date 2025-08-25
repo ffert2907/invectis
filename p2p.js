@@ -29,7 +29,7 @@ export async function createNode(peerId) {
       tcp(),
       webSockets()
     ],
-    connectionEncryption: [noise()],
+    connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
     services: {
       identify: identify(),
