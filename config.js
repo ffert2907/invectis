@@ -11,13 +11,19 @@ const config = {
 
 // Création d'un logger simple
 const logger = {
-  info: (...args) => {
+  prod: (...args) => {
     if (config.logs) {
+      // Ajoute une couleur pour distinguer les logs de prod
+      console.log('\x1b[32m✅ PROD:\x1b[0m', ...args)
+    }
+  },
+  info: (...args) => {
+    if (config.logs && config.appMode === 'debug') {
       console.log(...args)
     }
   },
   debug: (...args) => {
-    if (config.logs && config.logMode === 'verbose') {
+    if (config.logs && config.appMode === 'debug' && config.logMode === 'verbose') {
       // Ajoute une couleur pour distinguer les logs de debug
       console.log('\x1b[34m🔍 DEBUG:\x1b[0m', ...args)
     }

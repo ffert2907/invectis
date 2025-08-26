@@ -22,7 +22,7 @@ const TOPIC = '/invectis/transactions/1.0'
 
 async function main() {
   try {
-    logger.info(`Lancement en mode: ${config.appMode}`)
+    logger.prod(`Lancement en mode: ${config.appMode}`)
 
     // Initialisation du portefeuille
     logger.info('Initialisation du portefeuille...')
@@ -35,7 +35,7 @@ async function main() {
 
     // Démarrage du nœud
     await node.start()
-    logger.info('Nœud démarré avec succès')
+    logger.prod('Nœud démarré avec succès')
 
     // Debug: Affichage des protocoles supportés
     logger.debug('Protocoles supportés par ce nœud:')
@@ -44,8 +44,8 @@ async function main() {
 
     // Affichage des adresses d'écoute
     const addresses = node.libp2p.getMultiaddrs()
-    logger.info('\nAdresses d\'écoute:')
-    addresses.forEach(addr => logger.info(addr.toString()))
+    logger.prod('\nAdresses d\'écoute:')
+    addresses.forEach(addr => logger.prod(addr.toString()))
 
     // Copie automatique de l'adresse WebSocket dans le presse-papiers
     if (!peerAddress) {
@@ -53,7 +53,7 @@ async function main() {
         const wsAddress = addresses.find(addr => addr.toString().includes('/ws'))
         if (wsAddress) {
           await clipboardy.write(wsAddress.toString())
-          logger.info('\n✅ Adresse WebSocket copiée dans le presse-papiers!')
+          logger.prod('\n✅ Adresse WebSocket copiée dans le presse-papiers!')
           logger.info('Utilisez Ctrl+V pour la coller dans le deuxième terminal.')
         }
       } catch (error) {
@@ -76,7 +76,7 @@ async function main() {
         // Vérification que le peer existe encore
         logger.debug('Tentative de connexion...')
         const connection = await node.libp2p.dial(ma)
-        logger.info('✅ Connecté avec succès')
+        logger.prod('✅ Connecté avec succès')
         logger.debug('Détails de la connexion:')
         logger.debug('  - Remote peer:', connection.remotePeer.toString())
         logger.debug('  - Remote addr:', connection.remoteAddr.toString())
@@ -129,7 +129,7 @@ async function main() {
 
     // Abonnement au topic GossipSub
     await node.libp2p.services.pubsub.subscribe(TOPIC)
-    logger.info(`\n✅ Abonné au topic: ${TOPIC}`)
+    logger.prod(`\n✅ Abonné au topic: ${TOPIC}`)
 
     // Debug: Vérifier les peers du topic
     setTimeout(async () => {
