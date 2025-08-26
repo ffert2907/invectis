@@ -1,6 +1,15 @@
 import { initializeWallet } from './wallet.js'
 import { createNode } from './p2p.js'
-import { createPaymentTransaction, verifyTransaction, signTransaction } from './transaction.js'
+import {
+  createPaymentTransaction,
+  verifyTransaction,
+  signTransaction,
+  createSetRateRatioTransaction,
+  createVectorTransaction,
+  createSetDailyBonusTransaction,
+  updateRates
+} from './transaction.js'
+import { VECTORS } from './vectors.js';
 import { multiaddr } from '@multiformats/multiaddr'
 import { peerIdFromString } from '@libp2p/peer-id'
 import readline from 'readline'
@@ -156,11 +165,31 @@ async function main() {
         const isValid = await verifyTransaction(message, authorPeerId)
 
         if (isValid) {
-          logger.info('\n💸 Transaction reçue et valide:')
+          logger.info(`\n💸 Transaction reçue et valide (type: ${message.type})`)
           logger.info('De:', message.from)
-          logger.info('Pour:', message.to)
-          logger.info('Montant:', message.payload.amount, message.payload.currency)
           logger.info('Horodatage:', new Date(message.timestamp).toLocaleString())
+
+          switch (message.type) {
+            case 'PAYMENT':
+              logger.info('Pour:', message.to)
+              logger.info('Montant:', message.payload.amount, message.payload.currency)
+              break;
+            case 'SETRATERATIO':
+              logger.info('Nouveaux ratios de conversion:', message.payload.rates)
+              await updateRates(message.payload.rates);
+              logger.info('Ratios de conversion mis à jour.')
+              break;
+            case 'VECTOR_TRANSACTION':
+              logger.info('Pour:', message.to)
+              logger.info('Vecteurs:', message.payload.vectors)
+              logger.info('Temps Total:', message.payload.totalTime)
+              break;
+            case 'SETDAILYBONUS':
+              logger.info('Bonus journalier:', message.payload.bonus)
+              break;
+            default:
+              logger.warn('Type de transaction inconnu:', message.type)
+          }
         } else {
           logger.warn('Transaction reçue mais invalide!')
         }
@@ -171,37 +200,59 @@ async function main() {
 
     // Gestion de l'entrée utilisateur pour envoyer des transactions
     if (peerAddress) {
-      logger.info('\nAppuyez sur Entrée pour envoyer une transaction...')
+      const ma = multiaddr(peerAddress)
+      const recipientPeerId = peerIdFromString(ma.getPeerId())
 
-      rl.on('line', async () => {
-        try {
-          // Extraction du peerId du destinataire depuis l'adresse multiaddr
-          const ma = multiaddr(peerAddress)
-          const recipientPeerIdStr = ma.getPeerId()
-          if (!recipientPeerIdStr) {
-            throw new Error('Impossible d\'extraire le peerId du destinataire')
+      const askForTransaction = () => {
+        rl.question('\nType de transaction (1: Payment, 2: Vector, 3: SetRates, 4: DailyBonus)? ', async (choice) => {
+          let transaction;
+          try {
+            switch (choice) {
+              case '1':
+                transaction = createPaymentTransaction(wallet.peerId, recipientPeerId);
+                break;
+              case '2':
+                const vectorValues = {};
+                for(const vector of VECTORS) {
+                    vectorValues[vector[0]] = Math.floor(Math.random() * 10);
+                }
+                logger.info("Sending random vector values:", vectorValues);
+                transaction = await createVectorTransaction(wallet.peerId, recipientPeerId, vectorValues);
+                break;
+              case '3':
+                const newRates = {};
+                for(const vector of VECTORS) {
+                    newRates[vector[0]] = Math.random() * 2;
+                }
+                logger.info("Sending random rates:", newRates);
+                transaction = createSetRateRatioTransaction(wallet.peerId, newRates);
+                break;
+              case '4':
+                const walletBalance = Math.random() * 20;
+                const dailyTransactionSum = (Math.random() * 20) - 10;
+                logger.info(`Calculating bonus for balance ${walletBalance} and daily sum ${dailyTransactionSum}`);
+                transaction = createSetDailyBonusTransaction(wallet.peerId, walletBalance, dailyTransactionSum);
+                break;
+              default:
+                logger.warn('Choix invalide.');
+                askForTransaction();
+                return;
+            }
+
+            if (transaction) {
+              const signedTransaction = await signTransaction(transaction, wallet.sign);
+              const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
+              await node.libp2p.services.pubsub.publish(TOPIC, messageBytes);
+              logger.info('✅ Transaction envoyée!');
+            }
+          } catch (error) {
+            logger.error('Erreur d\'envoi:', error.message);
+            logger.debug('Stack trace:', error);
           }
-
-          const recipientPeerId = peerIdFromString(recipientPeerIdStr)
-
-          // Création et signature de la transaction
-          const transaction = createPaymentTransaction(wallet.peerId, recipientPeerId)
-          const signedTransaction = await signTransaction(transaction, wallet.sign)
-
-          logger.debug('Envoi de la transaction:', signedTransaction)
-          logger.debug('  - Peers disponibles sur le topic:',
-            node.libp2p.services.pubsub.getSubscribers(TOPIC).map(p => p.toString()))
-
-          // Publication de la transaction
-          const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction))
-          await node.libp2p.services.pubsub.publish(TOPIC, messageBytes)
-
-          logger.info('✅ Transaction envoyée!')
-        } catch (error) {
-          logger.error('Erreur d\'envoi:', error.message)
-          logger.debug('Stack trace:', error)
-        }
-      })
+          askForTransaction();
+        });
+      };
+      askForTransaction();
     }
 
     // Gestion de la fermeture propre
