@@ -20,6 +20,7 @@
     "@libp2p/tcp": "^10.1.19",
     "@libp2p/websockets": "^9.2.19",
     "@multiformats/multiaddr": "^12.5.1",
+    "@noble/curves": "^2.0.0",
     "clipboardy": "^4.0.0",
     "helia": "^5.5.1",
     "libp2p": "^2.10.0"
