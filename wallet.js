@@ -16,6 +16,29 @@ function extractSeedFromMarshalledKey(marshalledPrivKey) {
     // The first 32 bytes of the raw key is the seed used for signing.
     return rawKey.slice(0, 32)
   }
+
+  // Fallback for raw 32-byte seeds, just in case.
+  if (marshalledPrivKey.length === 32) {
+    return marshalledPrivKey
+  }
+
+  throw new Error(`Unsupported private key length: ${marshalledPrivKey.length}. Expected 32 or 68 bytes.`)
+}
+
+/**
+ * Extracts the 32-byte seed from a marshalled libp2p private key.
+ * @param {Uint8Array} marshalledPrivKey - The 68-byte marshalled private key.
+ * @returns {Uint8Array} - The 32-byte seed.
+ */
+function extractSeedFromMarshalledKey(marshalledPrivKey) {
+  // A standard marshalled Ed25519 key from libp2p is 68 bytes:
+  // 4 bytes of protobuf header + 64 bytes of raw key data.
+  if (marshalledPrivKey.length === 68) {
+    // The raw key is the 64 bytes after the 4-byte protobuf header.
+    const rawKey = marshalledPrivKey.slice(4)
+    // The first 32 bytes of the raw key is the seed used for signing.
+    return rawKey.slice(0, 32)
+  }
   
   // Fallback for raw 32-byte seeds, just in case.
   if (marshalledPrivKey.length === 32) {
@@ -110,98 +133,3 @@ export async function initializeWallet(filePath) {
     sign
   }
 }
-
-/*import { createEd25519PeerId, createFromPrivKey } from '@libp2p/peer-id-factory'
-import { readFile, writeFile } from 'fs/promises'
-import { unmarshalPrivateKey } from '@libp2p/crypto'
-*/
-/**
- * Initialise ou charge un portefeuille cryptographique
- * @param {string} filePath - Chemin vers le fichier du portefeuille
- * @returns {Promise<{peerId: PeerId, sign: function}>} - Objet contenant le peerId et une fonction de signature
- */
- /*
-export async function initializeWallet(filePath) {
-  let peerId
-  let privateKey
-
-  try {
-    console.log('🔍 DEBUG: Tentative de lecture du fichier wallet:', filePath)
-    
-    // Tentative de lecture du fichier existant
-    const data = await readFile(filePath, 'utf8')
-    console.log('🔍 DEBUG: Fichier wallet lu, tentative de parsing JSON...')
-    
-    // Nouveau format: stockage en JSON avec les clés exportées
-    const walletData = JSON.parse(data)
-    console.log('🔍 DEBUG: Format JSON détecté')
-    
-    if (walletData.version !== '1.0' || !walletData.privateKey) {
-      throw new Error('Format de wallet invalide ou obsolète')
-    }
-    
-    // Conversion des données base64 vers Uint8Array
-    const privateKeyBytes = new Uint8Array(Buffer.from(walletData.privateKey, 'base64'))
-    console.log('🔍 DEBUG: Clé privée convertie, taille:', privateKeyBytes.length)
-    
-    // Recréation du PeerId et de la clé privée pour la signature
-    peerId = await createFromPrivKey(privateKeyBytes)
-    privateKey = await unmarshalPrivateKey(privateKeyBytes) // Correction
-    
-    console.log('✅ Portefeuille existant chargé (format JSON)')
-    
-  } catch (error) {
-    console.log('🔍 DEBUG: Erreur de lecture/parsing:', error.message)
-    
-    if (error.code === 'ENOENT') {
-      console.log("🔍 DEBUG: Fichier inexistant, création d'un nouveau wallet...")
-    } else {
-      console.log('🔍 DEBUG: Fichier corrompu ou format obsolète, recréation...')
-    }
-    
-    // Création d'un nouveau portefeuille si le fichier n'existe pas ou est corrompu
-    peerId = await createEd25519PeerId()
-    // Correction: Obtenir la VRAIE clé privée pour pouvoir signer
-    privateKey = await unmarshalPrivateKey(peerId.privateKey)
-    
-	// Sauvegarde dans le nouveau format JSON
-	const walletData = {
-	  version: '1.0',
-	  type: 'Ed25519',
-	  // On sauvegarde les bytes de la clé privée (marshalée)
-	  privateKey: Buffer.from(peerId.privateKey).toString('base64'),
-	  publicKey: Buffer.from(peerId.publicKey).toString('base64'),
-	  peerId: peerId.toString(),
-	  created: new Date().toISOString()
-	}
-    
-    await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8')
-    console.log('✅ Nouveau portefeuille créé et sauvegardé (format JSON)')
-  }
-
-  console.log('🔍 DEBUG: PeerId final:', peerId.toString())
-  console.log('🔍 DEBUG: Type de clé:', peerId.type)
-*/
-  /**
-   * Signe des données avec la clé privée du portefeuille
-   * @param {Uint8Array} data - Données à signer
-   * @returns {Promise<Uint8Array>} - Signature
-   */
-/*  const sign = async (data) => {
-    console.log('🔍 DEBUG: Signature de données, taille:', data.length)
-    try {
-      const signature = await privateKey.sign(data)
-      console.log('🔍 DEBUG: Signature créée, taille:', signature.length)
-      return signature
-    } catch (error) {
-      console.error('❌ Erreur de signature:', error)
-      throw error
-    }
-  }
-
-  return {
-    peerId,
-    sign
-  }
-}
-*/
