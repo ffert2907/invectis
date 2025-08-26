@@ -17,7 +17,7 @@ function extractSeedFromMarshalledKey(marshalledPrivKey) {
     // The first 32 bytes of the raw key is the seed used for signing.
     return rawKey.slice(0, 32)
   }
-
+  
   // Fallback for raw 32-byte seeds, just in case.
   if (marshalledPrivKey.length === 32) {
     return marshalledPrivKey
