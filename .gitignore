@@ -1,3 +1,4 @@
 node_modules/
 wallet1.dat
 wallet2.dat
+.env
