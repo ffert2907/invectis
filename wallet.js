@@ -1,6 +1,7 @@
 import { createEd25519PeerId, createFromPrivKey } from '@libp2p/peer-id-factory'
 import { readFile, writeFile } from 'fs/promises'
 import { ed25519 } from '@noble/curves/ed25519.js'
+import { logger } from './config.js'
 
 /**
  * Extracts the 32-byte seed from a marshalled libp2p private key.
@@ -17,29 +18,6 @@ function extractSeedFromMarshalledKey(marshalledPrivKey) {
     return rawKey.slice(0, 32)
   }
 
-  // Fallback for raw 32-byte seeds, just in case.
-  if (marshalledPrivKey.length === 32) {
-    return marshalledPrivKey
-  }
-
-  throw new Error(`Unsupported private key length: ${marshalledPrivKey.length}. Expected 32 or 68 bytes.`)
-}
-
-/**
- * Extracts the 32-byte seed from a marshalled libp2p private key.
- * @param {Uint8Array} marshalledPrivKey - The 68-byte marshalled private key.
- * @returns {Uint8Array} - The 32-byte seed.
- */
-function extractSeedFromMarshalledKey(marshalledPrivKey) {
-  // A standard marshalled Ed25519 key from libp2p is 68 bytes:
-  // 4 bytes of protobuf header + 64 bytes of raw key data.
-  if (marshalledPrivKey.length === 68) {
-    // The raw key is the 64 bytes after the 4-byte protobuf header.
-    const rawKey = marshalledPrivKey.slice(4)
-    // The first 32 bytes of the raw key is the seed used for signing.
-    return rawKey.slice(0, 32)
-  }
-  
   // Fallback for raw 32-byte seeds, just in case.
   if (marshalledPrivKey.length === 32) {
     return marshalledPrivKey
@@ -58,35 +36,35 @@ export async function initializeWallet(filePath) {
   let privateKeySeed // This will be the 32-byte seed
 
   try {
-    console.log('🔍 DEBUG: Tentative de lecture du fichier wallet:', filePath)
+    logger.debug('Tentative de lecture du fichier wallet:', filePath)
     
     const data = await readFile(filePath, 'utf8')
-    console.log('🔍 DEBUG: Fichier wallet lu, tentative de parsing JSON...')
+    logger.debug('Fichier wallet lu, tentative de parsing JSON...')
     
     const walletData = JSON.parse(data)
-    console.log('🔍 DEBUG: Format JSON détecté')
+    logger.debug('Format JSON détecté')
     
     if (walletData.version !== '1.0' || !walletData.privateKey) {
       throw new Error('Format de wallet invalide ou obsolète')
     }
     
     const marshalledPrivKey = new Uint8Array(Buffer.from(walletData.privateKey, 'base64'))
-    console.log('🔍 DEBUG: Clé privée convertie, taille:', marshalledPrivKey.length)
+    logger.debug('Clé privée convertie, taille:', marshalledPrivKey.length)
     
     // We create the peerId from the full marshalled key to ensure consistency
     peerId = await createFromPrivKey(marshalledPrivKey)
     // We extract just the seed for signing purposes
     privateKeySeed = extractSeedFromMarshalledKey(marshalledPrivKey)
     
-    console.log('✅ Portefeuille existant chargé (format JSON)')
+    logger.info('✅ Portefeuille existant chargé (format JSON)')
     
   } catch (error) {
-    console.log('🔍 DEBUG: Erreur de lecture/parsing:', error.message)
+    logger.debug('Erreur de lecture/parsing:', error.message)
     
     if (error.code === 'ENOENT') {
-      console.log("🔍 DEBUG: Fichier inexistant, création d'un nouveau wallet...")
+      logger.debug("Fichier inexistant, création d'un nouveau wallet...")
     } else {
-      console.log('🔍 DEBUG: Fichier corrompu ou format obsolète, recréation...')
+      logger.debug('Fichier corrompu ou format obsolète, recréation...')
     }
     
     peerId = await createEd25519PeerId()
@@ -104,11 +82,11 @@ export async function initializeWallet(filePath) {
 	}
     
     await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8')
-    console.log('✅ Nouveau portefeuille créé et sauvegardé (format JSON)')
+    logger.info('✅ Nouveau portefeuille créé et sauvegardé (format JSON)')
   }
 
-  console.log('🔍 DEBUG: PeerId final:', peerId.toString())
-  console.log('🔍 DEBUG: Type de clé:', peerId.type)
+  logger.debug('PeerId final:', peerId.toString())
+  logger.debug('Type de clé:', peerId.type)
 
   /**
    * Signe des données avec la clé privée du portefeuille
@@ -116,14 +94,14 @@ export async function initializeWallet(filePath) {
    * @returns {Promise<Uint8Array>} - Signature
    */
   const sign = async (data) => {
-    console.log('🔍 DEBUG: Signature de données, taille:', data.length)
+    logger.debug('Signature de données, taille:', data.length)
     try {
       // Use the @noble/curves library to sign with the raw seed
       const signature = ed25519.sign(data, privateKeySeed)
-      console.log('🔍 DEBUG: Signature créée, taille:', signature.length)
+      logger.debug('Signature créée, taille:', signature.length)
       return signature
     } catch (error) {
-      console.error('❌ Erreur de signature:', error)
+      logger.error('Erreur de signature:', error)
       throw error
     }
   }
