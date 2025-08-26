@@ -16,29 +16,6 @@ function extractSeedFromMarshalledKey(marshalledPrivKey) {
     // The first 32 bytes of the raw key is the seed used for signing.
     return rawKey.slice(0, 32)
   }
-
-  // Fallback for raw 32-byte seeds, just in case.
-  if (marshalledPrivKey.length === 32) {
-    return marshalledPrivKey
-  }
-
-  throw new Error(`Unsupported private key length: ${marshalledPrivKey.length}. Expected 32 or 68 bytes.`)
-}
-
-/**
- * Extracts the 32-byte seed from a marshalled libp2p private key.
- * @param {Uint8Array} marshalledPrivKey - The 68-byte marshalled private key.
- * @returns {Uint8Array} - The 32-byte seed.
- */
-function extractSeedFromMarshalledKey(marshalledPrivKey) {
-  // A standard marshalled Ed25519 key from libp2p is 68 bytes:
-  // 4 bytes of protobuf header + 64 bytes of raw key data.
-  if (marshalledPrivKey.length === 68) {
-    // The raw key is the 64 bytes after the 4-byte protobuf header.
-    const rawKey = marshalledPrivKey.slice(4)
-    // The first 32 bytes of the raw key is the seed used for signing.
-    return rawKey.slice(0, 32)
-  }
   
   // Fallback for raw 32-byte seeds, just in case.
   if (marshalledPrivKey.length === 32) {
