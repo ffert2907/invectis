@@ -30,12 +30,15 @@ export async function verifyTransaction(transaction, authorPeerId) {
     // Extraction de la signature et des données originales
     const { signature, ...dataToVerify } = transaction
     
+    // CORRECTION: Convertir la signature (reçue en base64) en Uint8Array
+    const signatureBytes = new Uint8Array(Buffer.from(signature, 'base64'))
+
     // Conversion des données en Uint8Array pour la vérification
     const encoder = new TextEncoder()
     const dataBytes = encoder.encode(JSON.stringify(dataToVerify))
     
     // Vérification de la signature
-    return await authorPeerId.publicKey.verify(dataBytes, signature)
+    return await authorPeerId.publicKey.verify(dataBytes, signatureBytes)
   } catch (error) {
     console.error('Erreur lors de la vérification:', error)
     return false
@@ -59,6 +62,7 @@ export async function signTransaction(transaction, signFunction) {
   // Ajout de la signature à la transaction
   return {
     ...transaction,
-    signature
+    // CORRECTION: Convertir la signature en base64 pour la sérialisation JSON
+    signature: Buffer.from(signature).toString('base64')
   }
 }
