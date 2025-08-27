@@ -46,6 +46,101 @@ export function createPaymentTransaction(authorPeerId, recipientPeerId) {
 }
 
 /**
+ * Crée une transaction pour demander la validation d'un compte
+ * @param {PeerId} authorPeerId - Identité de l'expéditeur
+ * @param {PeerId} recipientPeerId - Identité du destinataire de la demande
+ * @returns {Object} - Transaction non signée
+ */
+export function createAskValidationAccountTransaction(authorPeerId, recipientPeerId) {
+  return {
+    type: 'ASK_VALIDATION_ACCOUNT',
+    from: authorPeerId.toString(),
+    to: recipientPeerId.toString(),
+    timestamp: Date.now(),
+    payload: {
+      message: 'Please provide your identity information for validation.'
+    }
+  };
+}
+
+/**
+ * Crée une transaction pour envoyer une information
+ * @param {PeerId} authorPeerId - Identité de l'expéditeur
+ * @param {string} message - Le message d'information
+ * @returns {Object} - Transaction non signée
+ */
+export function createInformationTransaction(authorPeerId, message) {
+  return {
+    type: 'INFORMATION',
+    from: authorPeerId.toString(),
+    timestamp: Date.now(),
+    payload: {
+      message
+    }
+  };
+}
+
+/**
+ * Crée une transaction pour poser une question de sondage
+ * @param {PeerId} authorPeerId - Identité de l'expéditeur
+ * @param {string} question - La question du sondage
+ * @param {string} type - Le type de sondage ('radio' or 'checkbox')
+ * @param {Array<string>} options - Les options de réponse
+ * @returns {Object} - Transaction non signée
+ */
+export function createPollQuestionTransaction(authorPeerId, question, type, options) {
+  const pollId = Date.now();
+  return {
+    type: 'POLL_QUESTION',
+    from: authorPeerId.toString(),
+    timestamp: pollId,
+    payload: {
+      pollId,
+      question,
+      type,
+      options
+    }
+  };
+}
+
+/**
+ * Crée une transaction pour répondre à un sondage
+ * @param {PeerId} authorPeerId - Identité de l'expéditeur
+ * @param {number} pollId - L'ID du sondage auquel on répond
+ * @param {string|Array<string>} answer - La réponse
+ * @returns {Object} - Transaction non signée
+ */
+export function createPollAnswerTransaction(authorPeerId, pollId, answer) {
+  return {
+    type: 'POLL_ANSWER',
+    from: authorPeerId.toString(),
+    timestamp: Date.now(),
+    payload: {
+      pollId,
+      answer
+    }
+  };
+}
+
+/**
+ * Crée une transaction pour valider un compte
+ * @param {PeerId} authorPeerId - Identité de l'expéditeur (celui qui valide)
+ * @param {PeerId} recipientPeerId - Identité du compte qui est validé
+ * @returns {Object} - Transaction non signée
+ */
+export function createAccountValidationTransaction(authorPeerId, recipientPeerId) {
+  return {
+    type: 'ACCOUNT_VALIDATION',
+    from: authorPeerId.toString(),
+    to: recipientPeerId.toString(),
+    timestamp: Date.now(),
+    payload: {
+      validated: true
+    }
+  };
+}
+
+/**
  * Crée une transaction pour définir les ratios de conversion des vecteurs
  * @param {PeerId} authorPeerId - Identité de l'émetteur (doit être autorisé)
  * @param {object} newRates - Les nouveaux ratios pour les vecteurs
