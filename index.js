@@ -1,6 +1,20 @@
 import { initializeWallet } from './wallet.js'
 import { createNode } from './p2p.js'
-import { createPaymentTransaction, verifyTransaction, signTransaction } from './transaction.js'
+import {
+  createPaymentTransaction,
+  verifyTransaction,
+  signTransaction,
+  createSetRateRatioTransaction,
+  createVectorTransaction,
+  createSetDailyBonusTransaction,
+  updateRates,
+  createAskValidationAccountTransaction,
+  createAccountValidationTransaction,
+  createPollQuestionTransaction,
+  createPollAnswerTransaction,
+  createInformationTransaction
+} from './transaction.js'
+import { VECTORS } from './vectors.js';
 import { multiaddr } from '@multiformats/multiaddr'
 import { peerIdFromString } from '@libp2p/peer-id'
 import readline from 'readline'
@@ -156,11 +170,56 @@ async function main() {
         const isValid = await verifyTransaction(message, authorPeerId)
 
         if (isValid) {
-          logger.info('\n💸 Transaction reçue et valide:')
+          logger.info(`\n💸 Transaction reçue et valide (type: ${message.type})`)
           logger.info('De:', message.from)
-          logger.info('Pour:', message.to)
-          logger.info('Montant:', message.payload.amount, message.payload.currency)
+          logger.info('Description:', message.description)
+          logger.info('Reference:', message.reference)
           logger.info('Horodatage:', new Date(message.timestamp).toLocaleString())
+
+          switch (message.type) {
+            case 'PAYMENT':
+              logger.info('Pour:', message.to)
+              logger.info('Montant:', message.payload.amount, message.payload.currency)
+              break;
+            case 'SETRATERATIO':
+              logger.info('Nouveaux ratios de conversion:', message.payload.rates)
+              await updateRates(message.payload.rates);
+              logger.info('Ratios de conversion mis à jour.')
+              break;
+            case 'VECTOR_TRANSACTION':
+              logger.info('Pour:', message.to)
+              logger.info('Vecteurs:', message.payload.vectors)
+              logger.info('Temps Total:', message.payload.totalTime)
+              break;
+            case 'SETDAILYBONUS':
+              logger.info('Bonus journalier:', message.payload.bonus)
+              break;
+            case 'ASK_VALIDATION_ACCOUNT':
+              logger.info('Demande de validation de compte de:', message.from)
+              logger.info('Message:', message.payload.message)
+              break;
+            case 'ACCOUNT_VALIDATION':
+              logger.info('Compte validé par:', message.from)
+              logger.info('Validé:', message.payload.validated)
+              break;
+            case 'POLL_QUESTION':
+              logger.info('Sondage reçu de:', message.from)
+              logger.info('Question:', message.payload.question)
+              logger.info('Type:', message.payload.type)
+              logger.info('Options:', message.payload.options)
+              break;
+            case 'POLL_ANSWER':
+              logger.info('Réponse au sondage reçue de:', message.from)
+              logger.info('Sondage ID:', message.payload.pollId)
+              logger.info('Réponse:', message.payload.answer)
+              break;
+            case 'INFORMATION':
+              logger.info('Information reçue de:', message.from)
+              logger.info('Message:', message.payload.message)
+              break;
+            default:
+              logger.warn('Type de transaction inconnu:', message.type)
+          }
         } else {
           logger.warn('Transaction reçue mais invalide!')
         }
@@ -171,37 +230,82 @@ async function main() {
 
     // Gestion de l'entrée utilisateur pour envoyer des transactions
     if (peerAddress) {
-      logger.info('\nAppuyez sur Entrée pour envoyer une transaction...')
+      const ma = multiaddr(peerAddress)
+      const recipientPeerId = peerIdFromString(ma.getPeerId())
 
-      rl.on('line', async () => {
-        try {
-          // Extraction du peerId du destinataire depuis l'adresse multiaddr
-          const ma = multiaddr(peerAddress)
-          const recipientPeerIdStr = ma.getPeerId()
-          if (!recipientPeerIdStr) {
-            throw new Error('Impossible d\'extraire le peerId du destinataire')
+      const askForTransaction = () => {
+        rl.question('\nType de transaction (1: Payment, 2: Vector, 3: SetRates, 4: DailyBonus, 5: AskValidation, 6: ValidateAccount, 7: PollQuestion, 8: PollAnswer, 9: Information)? ', async (choice) => {
+          let transaction;
+          try {
+            switch (choice) {
+              case '1':
+                transaction = createPaymentTransaction(wallet.peerId, recipientPeerId, 'Payment', 'ref-payment-001');
+                break;
+              case '2':
+                const vectorValues = {};
+                for(const vector of VECTORS) {
+                    vectorValues[vector[0]] = Math.floor(Math.random() * 10);
+                }
+                logger.info("Sending random vector values:", vectorValues);
+                transaction = await createVectorTransaction(wallet.peerId, recipientPeerId, vectorValues, 'Vector Transaction', 'ref-vector-001');
+                break;
+              case '3':
+                const newRates = {};
+                for(const vector of VECTORS) {
+                    newRates[vector[0]] = Math.random() * 2;
+                }
+                logger.info("Sending random rates:", newRates);
+                transaction = createSetRateRatioTransaction(wallet.peerId, newRates, 'Set Rate Ratio', 'ref-rates-001');
+                break;
+              case '4':
+                const walletBalance = Math.random() * 20;
+                const dailyTransactionSum = (Math.random() * 20) - 10;
+                logger.info(`Calculating bonus for balance ${walletBalance} and daily sum ${dailyTransactionSum}`);
+                transaction = createSetDailyBonusTransaction(wallet.peerId, walletBalance, dailyTransactionSum, 'Daily Bonus', 'ref-bonus-001');
+                break;
+              case '5':
+                transaction = createAskValidationAccountTransaction(wallet.peerId, recipientPeerId, 'Ask for validation', 'ref-ask-validation-001');
+                logger.info('Demande de validation envoyée à:', recipientPeerId.toString());
+                break;
+              case '6':
+                transaction = createAccountValidationTransaction(wallet.peerId, recipientPeerId, 'Account validation', 'ref-validation-001');
+                logger.info('Validation de compte envoyée à:', recipientPeerId.toString());
+                break;
+              case '7':
+                // For simplicity, we'll use a hardcoded poll
+                transaction = createPollQuestionTransaction(wallet.peerId, 'What is your favorite color?', 'radio', ['Red', 'Green', 'Blue'], 'Color Poll', 'ref-poll-q-001');
+                logger.info('Sondage envoyé.');
+                break;
+              case '8':
+                // Answering a hardcoded pollId, in a real app you'd get this from a received poll
+                const pollId = Date.now() - 10000; //-10sec
+                transaction = createPollAnswerTransaction(wallet.peerId, pollId, 'Blue', 'Color Poll Answer', 'ref-poll-a-001');
+                logger.info('Réponse au sondage envoyée.');
+                break;
+              case '9':
+                transaction = createInformationTransaction(wallet.peerId, 'This is a broadcast information message.', 'Information', 'ref-info-001');
+                logger.info('Information envoyée.');
+                break;
+              default:
+                logger.warn('Choix invalide.');
+                askForTransaction();
+                return;
+            }
+
+            if (transaction) {
+              const signedTransaction = await signTransaction(transaction, wallet.sign);
+              const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
+              await node.libp2p.services.pubsub.publish(TOPIC, messageBytes);
+              logger.info('✅ Transaction envoyée!');
+            }
+          } catch (error) {
+            logger.error('Erreur d\'envoi:', error.message);
+            logger.debug('Stack trace:', error);
           }
-
-          const recipientPeerId = peerIdFromString(recipientPeerIdStr)
-
-          // Création et signature de la transaction
-          const transaction = createPaymentTransaction(wallet.peerId, recipientPeerId)
-          const signedTransaction = await signTransaction(transaction, wallet.sign)
-
-          logger.debug('Envoi de la transaction:', signedTransaction)
-          logger.debug('  - Peers disponibles sur le topic:',
-            node.libp2p.services.pubsub.getSubscribers(TOPIC).map(p => p.toString()))
-
-          // Publication de la transaction
-          const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction))
-          await node.libp2p.services.pubsub.publish(TOPIC, messageBytes)
-
-          logger.info('✅ Transaction envoyée!')
-        } catch (error) {
-          logger.error('Erreur d\'envoi:', error.message)
-          logger.debug('Stack trace:', error)
-        }
-      })
+          askForTransaction();
+        });
+      };
+      askForTransaction();
     }
 
     // Gestion de la fermeture propre

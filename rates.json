@@ -1,0 +1,15 @@
+{
+  "currentRates": {
+    "Heure": 1,
+    "Eau": 1,
+    "Elec": 1,
+    "Essence": 1,
+    "RNR": 1,
+    "RR": 1,
+    "Dechet": 1,
+    "Polluant": 1,
+    "Surface": 1,
+    "Utilite": 1
+  },
+  "history": []
+}
