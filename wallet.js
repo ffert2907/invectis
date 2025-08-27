@@ -29,11 +29,12 @@ function extractSeedFromMarshalledKey(marshalledPrivKey) {
 /**
  * Initialise ou charge un portefeuille cryptographique
  * @param {string} filePath - Chemin vers le fichier du portefeuille
- * @returns {Promise<{peerId: PeerId, sign: function}>} - Objet contenant le peerId et une fonction de signature
+ * @returns {Promise<{peerId: PeerId, sign: function, accountType: string}>} - Objet contenant le peerId, une fonction de signature et le type de compte
  */
 export async function initializeWallet(filePath) {
   let peerId
   let privateKeySeed // This will be the 32-byte seed
+  let accountType
 
   try {
     logger.debug('Tentative de lecture du fichier wallet:', filePath)
@@ -56,7 +57,9 @@ export async function initializeWallet(filePath) {
     // We extract just the seed for signing purposes
     privateKeySeed = extractSeedFromMarshalledKey(marshalledPrivKey)
     
-    logger.info('✅ Portefeuille existant chargé (format JSON)')
+    // Lecture du type de compte, avec une valeur par défaut
+    accountType = walletData.accountType || 'standard'
+    logger.info(`✅ Portefeuille existant chargé (format JSON), type de compte: ${accountType}`)
     
   } catch (error) {
     logger.debug('Erreur de lecture/parsing:', error.message)
@@ -70,10 +73,12 @@ export async function initializeWallet(filePath) {
     peerId = await createEd25519PeerId()
     // Extract the seed from the newly created key
     privateKeySeed = extractSeedFromMarshalledKey(peerId.privateKey)
+    accountType = 'standard' // Type par défaut pour les nouveaux portefeuilles
     
 	const walletData = {
 	  version: '1.0',
 	  type: 'Ed25519',
+	  accountType: accountType,
       // We still save the full marshalled key from libp2p
 	  privateKey: Buffer.from(peerId.privateKey).toString('base64'),
 	  publicKey: Buffer.from(peerId.publicKey).toString('base64'),
@@ -82,7 +87,7 @@ export async function initializeWallet(filePath) {
 	}
     
     await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8')
-    logger.info('✅ Nouveau portefeuille créé et sauvegardé (format JSON)')
+    logger.info(`✅ Nouveau portefeuille créé (type: ${accountType}) et sauvegardé (format JSON)`)
   }
 
   logger.debug('PeerId final:', peerId.toString())
@@ -108,6 +113,7 @@ export async function initializeWallet(filePath) {
 
   return {
     peerId,
-    sign
+    sign,
+    accountType
   }
 }

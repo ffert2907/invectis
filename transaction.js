@@ -1,8 +1,16 @@
 import { peerIdFromString } from '@libp2p/peer-id'
 import { promises as fs } from 'fs';
 import { VECTORS } from './vectors.js';
+import { ACCOUNT_RIGHTS } from './rights.js';
 
 let ratesCache = null;
+
+function hasRight(accountType, transactionType) {
+  if (!ACCOUNT_RIGHTS[accountType] || !ACCOUNT_RIGHTS[accountType].includes(transactionType)) {
+    throw new Error(`Account type '${accountType}' is not authorized to perform '${transactionType}' transactions.`);
+  }
+  return true;
+}
 
 async function getRates() {
   if (ratesCache) {
@@ -30,14 +38,18 @@ export async function updateRates(newRates) {
  * Crée une transaction de paiement factice
  * @param {PeerId} authorPeerId - Identité de l'expéditeur
  * @param {PeerId} recipientPeerId - Identité du destinataire
+ * @param {string} accountType - Le type de compte de l'expéditeur
  * @returns {Object} - Transaction non signée
  */
-export function createPaymentTransaction(authorPeerId, recipientPeerId) {
+export function createPaymentTransaction(authorPeerId, recipientPeerId, description, reference, accountType) {
+  // No rights check for this transaction type
   return {
     type: 'PAYMENT',
     from: authorPeerId.toString(),
     to: recipientPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       amount: Math.floor(Math.random() * 100) + 1,
       currency: 'TOKEN'
@@ -49,14 +61,18 @@ export function createPaymentTransaction(authorPeerId, recipientPeerId) {
  * Crée une transaction pour demander la validation d'un compte
  * @param {PeerId} authorPeerId - Identité de l'expéditeur
  * @param {PeerId} recipientPeerId - Identité du destinataire de la demande
+ * @param {string} accountType - Le type de compte de l'expéditeur
  * @returns {Object} - Transaction non signée
  */
-export function createAskValidationAccountTransaction(authorPeerId, recipientPeerId) {
+export function createAskValidationAccountTransaction(authorPeerId, recipientPeerId, description, reference, accountType) {
+  hasRight(accountType, 'ASK_VALIDATION_ACCOUNT');
   return {
     type: 'ASK_VALIDATION_ACCOUNT',
     from: authorPeerId.toString(),
     to: recipientPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       message: 'Please provide your identity information for validation.'
     }
@@ -67,13 +83,17 @@ export function createAskValidationAccountTransaction(authorPeerId, recipientPee
  * Crée une transaction pour envoyer une information
  * @param {PeerId} authorPeerId - Identité de l'expéditeur
  * @param {string} message - Le message d'information
+ * @param {string} accountType - Le type de compte de l'expéditeur
  * @returns {Object} - Transaction non signée
  */
-export function createInformationTransaction(authorPeerId, message) {
+export function createInformationTransaction(authorPeerId, message, description, reference, accountType) {
+  hasRight(accountType, 'INFORMATION');
   return {
     type: 'INFORMATION',
     from: authorPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       message
     }
@@ -86,14 +106,18 @@ export function createInformationTransaction(authorPeerId, message) {
  * @param {string} question - La question du sondage
  * @param {string} type - Le type de sondage ('radio' or 'checkbox')
  * @param {Array<string>} options - Les options de réponse
+ * @param {string} accountType - Le type de compte de l'expéditeur
  * @returns {Object} - Transaction non signée
  */
-export function createPollQuestionTransaction(authorPeerId, question, type, options) {
+export function createPollQuestionTransaction(authorPeerId, question, type, options, description, reference, accountType) {
+  hasRight(accountType, 'POLL_QUESTION');
   const pollId = Date.now();
   return {
     type: 'POLL_QUESTION',
     from: authorPeerId.toString(),
     timestamp: pollId,
+    description: description || '',
+    reference: reference || '',
     payload: {
       pollId,
       question,
@@ -108,13 +132,17 @@ export function createPollQuestionTransaction(authorPeerId, question, type, opti
  * @param {PeerId} authorPeerId - Identité de l'expéditeur
  * @param {number} pollId - L'ID du sondage auquel on répond
  * @param {string|Array<string>} answer - La réponse
+ * @param {string} accountType - Le type de compte de l'expéditeur
  * @returns {Object} - Transaction non signée
  */
-export function createPollAnswerTransaction(authorPeerId, pollId, answer) {
+export function createPollAnswerTransaction(authorPeerId, pollId, answer, description, reference, accountType) {
+  // No rights check for this transaction type
   return {
     type: 'POLL_ANSWER',
     from: authorPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       pollId,
       answer
@@ -126,14 +154,18 @@ export function createPollAnswerTransaction(authorPeerId, pollId, answer) {
  * Crée une transaction pour valider un compte
  * @param {PeerId} authorPeerId - Identité de l'expéditeur (celui qui valide)
  * @param {PeerId} recipientPeerId - Identité du compte qui est validé
+ * @param {string} accountType - Le type de compte de l'expéditeur
  * @returns {Object} - Transaction non signée
  */
-export function createAccountValidationTransaction(authorPeerId, recipientPeerId) {
+export function createAccountValidationTransaction(authorPeerId, recipientPeerId, description, reference, accountType) {
+  // No rights check for this transaction type
   return {
     type: 'ACCOUNT_VALIDATION',
     from: authorPeerId.toString(),
     to: recipientPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       validated: true
     }
@@ -144,9 +176,11 @@ export function createAccountValidationTransaction(authorPeerId, recipientPeerId
  * Crée une transaction pour définir les ratios de conversion des vecteurs
  * @param {PeerId} authorPeerId - Identité de l'émetteur (doit être autorisé)
  * @param {object} newRates - Les nouveaux ratios pour les vecteurs
+ * @param {string} accountType - Le type de compte de l'expéditeur
  * @returns {Object} - Transaction non signée
  */
-export function createSetRateRatioTransaction(authorPeerId, newRates) {
+export function createSetRateRatioTransaction(authorPeerId, newRates, description, reference, accountType) {
+  hasRight(accountType, 'SETRATERATIO');
   // Validation simple pour s'assurer que les nouveaux taux sont valides
   for (const vector of VECTORS) {
     const vectorName = vector[0];
@@ -159,6 +193,8 @@ export function createSetRateRatioTransaction(authorPeerId, newRates) {
     type: 'SETRATERATIO',
     from: authorPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       rates: newRates
     }
@@ -170,9 +206,11 @@ export function createSetRateRatioTransaction(authorPeerId, newRates) {
  * @param {PeerId} authorPeerId - Identité de l'utilisateur
  * @param {number} walletBalance - Le solde actuel du portefeuille en "Heure"
  * @param {number} dailyTransactionSum - La somme des transactions de la journée en "Heure"
+ * @param {string} accountType - Le type de compte de l'expéditeur
  * @returns {Object} - Transaction non signée
  */
-export function createSetDailyBonusTransaction(authorPeerId, walletBalance, dailyTransactionSum) {
+export function createSetDailyBonusTransaction(authorPeerId, walletBalance, dailyTransactionSum, description, reference, accountType) {
+  hasRight(accountType, 'SETDAILYBONUS');
   let bonus = 0;
   if (walletBalance < 8) {
     if (dailyTransactionSum !== 0) {
@@ -197,6 +235,8 @@ export function createSetDailyBonusTransaction(authorPeerId, walletBalance, dail
     type: 'SETDAILYBONUS',
     from: authorPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       bonus: bonus
     }
@@ -208,9 +248,11 @@ export function createSetDailyBonusTransaction(authorPeerId, walletBalance, dail
  * @param {PeerId} authorPeerId - Identité de l'expéditeur
  * @param {PeerId} recipientPeerId - Identité du destinataire
  * @param {object} vectorValues - Les valeurs pour chaque vecteur
+ * @param {string} accountType - Le type de compte de l'expéditeur
  * @returns {Promise<Object>} - Transaction non signée
  */
-export async function createVectorTransaction(authorPeerId, recipientPeerId, vectorValues) {
+export async function createVectorTransaction(authorPeerId, recipientPeerId, vectorValues, description, reference, accountType) {
+  hasRight(accountType, 'VECTOR_TRANSACTION');
   const { currentRates } = await getRates();
   let totalTime = 0;
 
@@ -228,6 +270,8 @@ export async function createVectorTransaction(authorPeerId, recipientPeerId, vec
     from: authorPeerId.toString(),
     to: recipientPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       vectors: vectorValues,
       totalTime: totalTime
