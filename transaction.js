@@ -32,12 +32,14 @@ export async function updateRates(newRates) {
  * @param {PeerId} recipientPeerId - Identité du destinataire
  * @returns {Object} - Transaction non signée
  */
-export function createPaymentTransaction(authorPeerId, recipientPeerId) {
+export function createPaymentTransaction(authorPeerId, recipientPeerId, description, reference) {
   return {
     type: 'PAYMENT',
     from: authorPeerId.toString(),
     to: recipientPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       amount: Math.floor(Math.random() * 100) + 1,
       currency: 'TOKEN'
@@ -51,12 +53,14 @@ export function createPaymentTransaction(authorPeerId, recipientPeerId) {
  * @param {PeerId} recipientPeerId - Identité du destinataire de la demande
  * @returns {Object} - Transaction non signée
  */
-export function createAskValidationAccountTransaction(authorPeerId, recipientPeerId) {
+export function createAskValidationAccountTransaction(authorPeerId, recipientPeerId, description, reference) {
   return {
     type: 'ASK_VALIDATION_ACCOUNT',
     from: authorPeerId.toString(),
     to: recipientPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       message: 'Please provide your identity information for validation.'
     }
@@ -69,11 +73,13 @@ export function createAskValidationAccountTransaction(authorPeerId, recipientPee
  * @param {string} message - Le message d'information
  * @returns {Object} - Transaction non signée
  */
-export function createInformationTransaction(authorPeerId, message) {
+export function createInformationTransaction(authorPeerId, message, description, reference) {
   return {
     type: 'INFORMATION',
     from: authorPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       message
     }
@@ -88,12 +94,14 @@ export function createInformationTransaction(authorPeerId, message) {
  * @param {Array<string>} options - Les options de réponse
  * @returns {Object} - Transaction non signée
  */
-export function createPollQuestionTransaction(authorPeerId, question, type, options) {
+export function createPollQuestionTransaction(authorPeerId, question, type, options, description, reference) {
   const pollId = Date.now();
   return {
     type: 'POLL_QUESTION',
     from: authorPeerId.toString(),
     timestamp: pollId,
+    description: description || '',
+    reference: reference || '',
     payload: {
       pollId,
       question,
@@ -110,11 +118,13 @@ export function createPollQuestionTransaction(authorPeerId, question, type, opti
  * @param {string|Array<string>} answer - La réponse
  * @returns {Object} - Transaction non signée
  */
-export function createPollAnswerTransaction(authorPeerId, pollId, answer) {
+export function createPollAnswerTransaction(authorPeerId, pollId, answer, description, reference) {
   return {
     type: 'POLL_ANSWER',
     from: authorPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       pollId,
       answer
@@ -128,12 +138,14 @@ export function createPollAnswerTransaction(authorPeerId, pollId, answer) {
  * @param {PeerId} recipientPeerId - Identité du compte qui est validé
  * @returns {Object} - Transaction non signée
  */
-export function createAccountValidationTransaction(authorPeerId, recipientPeerId) {
+export function createAccountValidationTransaction(authorPeerId, recipientPeerId, description, reference) {
   return {
     type: 'ACCOUNT_VALIDATION',
     from: authorPeerId.toString(),
     to: recipientPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       validated: true
     }
@@ -146,7 +158,7 @@ export function createAccountValidationTransaction(authorPeerId, recipientPeerId
  * @param {object} newRates - Les nouveaux ratios pour les vecteurs
  * @returns {Object} - Transaction non signée
  */
-export function createSetRateRatioTransaction(authorPeerId, newRates) {
+export function createSetRateRatioTransaction(authorPeerId, newRates, description, reference) {
   // Validation simple pour s'assurer que les nouveaux taux sont valides
   for (const vector of VECTORS) {
     const vectorName = vector[0];
@@ -159,6 +171,8 @@ export function createSetRateRatioTransaction(authorPeerId, newRates) {
     type: 'SETRATERATIO',
     from: authorPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       rates: newRates
     }
@@ -172,7 +186,7 @@ export function createSetRateRatioTransaction(authorPeerId, newRates) {
  * @param {number} dailyTransactionSum - La somme des transactions de la journée en "Heure"
  * @returns {Object} - Transaction non signée
  */
-export function createSetDailyBonusTransaction(authorPeerId, walletBalance, dailyTransactionSum) {
+export function createSetDailyBonusTransaction(authorPeerId, walletBalance, dailyTransactionSum, description, reference) {
   let bonus = 0;
   if (walletBalance < 8) {
     if (dailyTransactionSum !== 0) {
@@ -197,6 +211,8 @@ export function createSetDailyBonusTransaction(authorPeerId, walletBalance, dail
     type: 'SETDAILYBONUS',
     from: authorPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       bonus: bonus
     }
@@ -210,7 +226,7 @@ export function createSetDailyBonusTransaction(authorPeerId, walletBalance, dail
  * @param {object} vectorValues - Les valeurs pour chaque vecteur
  * @returns {Promise<Object>} - Transaction non signée
  */
-export async function createVectorTransaction(authorPeerId, recipientPeerId, vectorValues) {
+export async function createVectorTransaction(authorPeerId, recipientPeerId, vectorValues, description, reference) {
   const { currentRates } = await getRates();
   let totalTime = 0;
 
@@ -228,6 +244,8 @@ export async function createVectorTransaction(authorPeerId, recipientPeerId, vec
     from: authorPeerId.toString(),
     to: recipientPeerId.toString(),
     timestamp: Date.now(),
+    description: description || '',
+    reference: reference || '',
     payload: {
       vectors: vectorValues,
       totalTime: totalTime

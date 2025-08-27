@@ -172,6 +172,8 @@ async function main() {
         if (isValid) {
           logger.info(`\n💸 Transaction reçue et valide (type: ${message.type})`)
           logger.info('De:', message.from)
+          logger.info('Description:', message.description)
+          logger.info('Reference:', message.reference)
           logger.info('Horodatage:', new Date(message.timestamp).toLocaleString())
 
           switch (message.type) {
@@ -237,7 +239,7 @@ async function main() {
           try {
             switch (choice) {
               case '1':
-                transaction = createPaymentTransaction(wallet.peerId, recipientPeerId);
+                transaction = createPaymentTransaction(wallet.peerId, recipientPeerId, 'Payment', 'ref-payment-001');
                 break;
               case '2':
                 const vectorValues = {};
@@ -245,7 +247,7 @@ async function main() {
                     vectorValues[vector[0]] = Math.floor(Math.random() * 10);
                 }
                 logger.info("Sending random vector values:", vectorValues);
-                transaction = await createVectorTransaction(wallet.peerId, recipientPeerId, vectorValues);
+                transaction = await createVectorTransaction(wallet.peerId, recipientPeerId, vectorValues, 'Vector Transaction', 'ref-vector-001');
                 break;
               case '3':
                 const newRates = {};
@@ -253,35 +255,35 @@ async function main() {
                     newRates[vector[0]] = Math.random() * 2;
                 }
                 logger.info("Sending random rates:", newRates);
-                transaction = createSetRateRatioTransaction(wallet.peerId, newRates);
+                transaction = createSetRateRatioTransaction(wallet.peerId, newRates, 'Set Rate Ratio', 'ref-rates-001');
                 break;
               case '4':
                 const walletBalance = Math.random() * 20;
                 const dailyTransactionSum = (Math.random() * 20) - 10;
                 logger.info(`Calculating bonus for balance ${walletBalance} and daily sum ${dailyTransactionSum}`);
-                transaction = createSetDailyBonusTransaction(wallet.peerId, walletBalance, dailyTransactionSum);
+                transaction = createSetDailyBonusTransaction(wallet.peerId, walletBalance, dailyTransactionSum, 'Daily Bonus', 'ref-bonus-001');
                 break;
               case '5':
-                transaction = createAskValidationAccountTransaction(wallet.peerId, recipientPeerId);
+                transaction = createAskValidationAccountTransaction(wallet.peerId, recipientPeerId, 'Ask for validation', 'ref-ask-validation-001');
                 logger.info('Demande de validation envoyée à:', recipientPeerId.toString());
                 break;
               case '6':
-                transaction = createAccountValidationTransaction(wallet.peerId, recipientPeerId);
+                transaction = createAccountValidationTransaction(wallet.peerId, recipientPeerId, 'Account validation', 'ref-validation-001');
                 logger.info('Validation de compte envoyée à:', recipientPeerId.toString());
                 break;
               case '7':
                 // For simplicity, we'll use a hardcoded poll
-                transaction = createPollQuestionTransaction(wallet.peerId, 'What is your favorite color?', 'radio', ['Red', 'Green', 'Blue']);
+                transaction = createPollQuestionTransaction(wallet.peerId, 'What is your favorite color?', 'radio', ['Red', 'Green', 'Blue'], 'Color Poll', 'ref-poll-q-001');
                 logger.info('Sondage envoyé.');
                 break;
               case '8':
                 // Answering a hardcoded pollId, in a real app you'd get this from a received poll
                 const pollId = Date.now() - 10000; //-10sec
-                transaction = createPollAnswerTransaction(wallet.peerId, pollId, 'Blue');
+                transaction = createPollAnswerTransaction(wallet.peerId, pollId, 'Blue', 'Color Poll Answer', 'ref-poll-a-001');
                 logger.info('Réponse au sondage envoyée.');
                 break;
               case '9':
-                transaction = createInformationTransaction(wallet.peerId, 'This is a broadcast information message.');
+                transaction = createInformationTransaction(wallet.peerId, 'This is a broadcast information message.', 'Information', 'ref-info-001');
                 logger.info('Information envoyée.');
                 break;
               default:
