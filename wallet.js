@@ -1,119 +1,79 @@
-import { createEd25519PeerId, createFromPrivKey } from '@libp2p/peer-id-factory'
 import { readFile, writeFile } from 'fs/promises'
-import { ed25519 } from '@noble/curves/ed25519.js'
 import { logger } from './config.js'
+import { createHash } from 'crypto'
 
 /**
- * Extracts the 32-byte seed from a marshalled libp2p private key.
- * @param {Uint8Array} marshalledPrivKey - The 68-byte marshalled private key.
- * @returns {Uint8Array} - The 32-byte seed.
+ * Initialise ou charge un portefeuille cryptographique.
+ * Cette fonction gère la création d'une nouvelle clé privée ou le chargement d'une clé existante.
+ * @param {string} filePath - Chemin vers le fichier du portefeuille.
+ * @param {import('readline').Interface} rl - L'interface readline pour les entrées utilisateur.
+ * @returns {Promise<{privateKey: import('@libp2p/interface-keys').PrivateKey, accountType: string, country: string, city: string, nationalIdHash: string}>} - Un objet contenant la clé privée libp2p et les métadonnées du portefeuille.
  */
-function extractSeedFromMarshalledKey(marshalledPrivKey) {
-  // A standard marshalled Ed25519 key from libp2p is 68 bytes:
-  // 4 bytes of protobuf header + 64 bytes of raw key data.
-  if (marshalledPrivKey.length === 68) {
-    // The raw key is the 64 bytes after the 4-byte protobuf header.
-    const rawKey = marshalledPrivKey.slice(4)
-    // The first 32 bytes of the raw key is the seed used for signing.
-    return rawKey.slice(0, 32)
-  }
-
-  // Fallback for raw 32-byte seeds, just in case.
-  if (marshalledPrivKey.length === 32) {
-    return marshalledPrivKey
-  }
-
-  throw new Error(`Unsupported private key length: ${marshalledPrivKey.length}. Expected 32 or 68 bytes.`)
-}
-
-/**
- * Initialise ou charge un portefeuille cryptographique
- * @param {string} filePath - Chemin vers le fichier du portefeuille
- * @returns {Promise<{peerId: PeerId, sign: function, accountType: string}>} - Objet contenant le peerId, une fonction de signature et le type de compte
- */
-export async function initializeWallet(filePath) {
-  let peerId
-  let privateKeySeed // This will be the 32-byte seed
-  let accountType
+export async function initializeWallet(filePath, rl) {
+  let privateKey
+  let accountType, country, city, nationalIdHash
 
   try {
-    logger.debug('Tentative de lecture du fichier wallet:', filePath)
-    
+    logger.debug('Attempting to load wallet from:', filePath)
     const data = await readFile(filePath, 'utf8')
-    logger.debug('Fichier wallet lu, tentative de parsing JSON...')
-    
     const walletData = JSON.parse(data)
-    logger.debug('Format JSON détecté')
-    
+
     if (walletData.version !== '1.0' || !walletData.privateKey) {
-      throw new Error('Format de wallet invalide ou obsolète')
+      throw new Error('Invalid or outdated wallet format.')
     }
-    
+
+    const libp2pCrypto = await import('@libp2p/crypto')
     const marshalledPrivKey = new Uint8Array(Buffer.from(walletData.privateKey, 'base64'))
-    logger.debug('Clé privée convertie, taille:', marshalledPrivKey.length)
+    privateKey = await libp2pCrypto.keys.privateKeyFromProtobuf(marshalledPrivKey)
     
-    // We create the peerId from the full marshalled key to ensure consistency
-    peerId = await createFromPrivKey(marshalledPrivKey)
-    // We extract just the seed for signing purposes
-    privateKeySeed = extractSeedFromMarshalledKey(marshalledPrivKey)
-    
-    // Lecture du type de compte, avec une valeur par défaut
     accountType = walletData.accountType || 'standard'
-    logger.info(`✅ Portefeuille existant chargé (format JSON), type de compte: ${accountType}`)
-    
+    country = walletData.country
+    city = walletData.city
+    nationalIdHash = walletData.nationalIdHash
+    logger.info(`✅ Existing wallet loaded (Account Type: ${accountType})`)
+
   } catch (error) {
-    logger.debug('Erreur de lecture/parsing:', error.message)
-    
-    if (error.code === 'ENOENT') {
-      logger.debug("Fichier inexistant, création d'un nouveau wallet...")
-    } else {
-      logger.debug('Fichier corrompu ou format obsolète, recréation...')
+    if (error.code !== 'ENOENT') {
+      logger.debug(`Error reading wallet, will create a new one. Error: ${error.message}`)
     }
     
-    peerId = await createEd25519PeerId()
-    // Extract the seed from the newly created key
-    privateKeySeed = extractSeedFromMarshalledKey(peerId.privateKey)
-    accountType = 'standard' // Type par défaut pour les nouveaux portefeuilles
+    const askQuestion = (rl, query) => new Promise(resolve => rl.question(query, resolve))
+
+    logger.info('\n################################################################')
+    logger.info('Creating a new wallet. Please provide the following information:')
+    country = await askQuestion(rl, '  - 2-letter ISO Country Code (e.g., FR for France): ')
+    city = await askQuestion(rl, '  - City: ')
+    const nationalId = await askQuestion(rl, '  - National ID Number (will not be stored): ')
+    logger.info('################################################################\n')
+
+    nationalIdHash = createHash('sha256').update(nationalId.trim()).digest('hex')
+    logger.info('✅ National ID securely hashed.')
+
+    const libp2pCrypto = await import('@libp2p/crypto')
+    privateKey = await libp2pCrypto.keys.generateKeyPair('Ed25519')
+    accountType = 'standard'
     
-	const walletData = {
-	  version: '1.0',
-	  type: 'Ed25519',
-	  accountType: accountType,
-      // We still save the full marshalled key from libp2p
-	  privateKey: Buffer.from(peerId.privateKey).toString('base64'),
-	  publicKey: Buffer.from(peerId.publicKey).toString('base64'),
-	  peerId: peerId.toString(),
-	  created: new Date().toISOString()
-	}
+    const marshalledKey = libp2pCrypto.keys.privateKeyToProtobuf(privateKey)
+	  const walletData = {
+	    version: '1.0',
+	    type: 'Ed25519',
+	    accountType,
+      country: country.trim(),
+      city: city.trim(),
+      nationalIdHash,
+	    privateKey: Buffer.from(marshalledKey).toString('base64'),
+	    created: new Date().toISOString()
+	  }
     
     await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8')
-    logger.info(`✅ Nouveau portefeuille créé (type: ${accountType}) et sauvegardé (format JSON)`)
-  }
-
-  logger.debug('PeerId final:', peerId.toString())
-  logger.debug('Type de clé:', peerId.type)
-
-  /**
-   * Signe des données avec la clé privée du portefeuille
-   * @param {Uint8Array} data - Données à signer
-   * @returns {Promise<Uint8Array>} - Signature
-   */
-  const sign = async (data) => {
-    logger.debug('Signature de données, taille:', data.length)
-    try {
-      // Use the @noble/curves library to sign with the raw seed
-      const signature = ed25519.sign(data, privateKeySeed)
-      logger.debug('Signature créée, taille:', signature.length)
-      return signature
-    } catch (error) {
-      logger.error('Erreur de signature:', error)
-      throw error
-    }
+    logger.info(`✅ New wallet created and saved (Account Type: ${accountType})`)
   }
 
   return {
-    peerId,
-    sign,
-    accountType
+    privateKey,
+    accountType,
+    country,
+    city,
+    nationalIdHash
   }
 }
