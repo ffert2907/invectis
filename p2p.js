@@ -9,16 +9,15 @@ import { createHelia } from 'helia'
 
 /**
  * Crée et configure un nœud P2P avec Helia et support WebSockets
- * @param {PeerId} peerId - Identité du nœud
+ * @param {import('@libp2p/interface-keys').PrivateKey} privateKey - La clé privée du noeud
  * @returns {Promise<Helia>} - Instance Helia configurée
  */
-export async function createNode(peerId) {
+export async function createNode(privateKey) {
   console.log('🔍 DEBUG: Configuration du nœud libp2p...')
-  console.log('  - PeerId:', peerId.toString())
   
   // Configuration de libp2p avec WebSockets
   const libp2pConfig = {
-    peerId,
+    privateKey,
     addresses: {
       listen: [
         '/ip4/0.0.0.0/tcp/0',
