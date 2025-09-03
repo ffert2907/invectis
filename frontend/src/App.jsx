@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle } from 'lucide-react';
 
 function App() {
@@ -7,28 +7,40 @@ function App() {
   const [showBalance, setShowBalance] = useState(true);
   const [showVectorDetails, setShowVectorDetails] = useState({});
 
-  const wallets = [
-    {
-      id: 1,
-      name: 'Wallet Principal',
-      address: 'inv1x7k2m...9d4f',
-      balance: { main: 1247.58, vectors: [124.7, 87.3, 156.9, 92.1, 78.4, 201.2, 45.6, 133.8, 67.2] }
-    },
-    {
-      id: 2,
-      name: 'Wallet Trading',
-      address: 'inv2h8n5p...3a7c',
-      balance: { main: 856.32, vectors: [85.6, 62.1, 103.4, 71.8, 95.7, 128.3, 39.2, 88.9, 44.1] }
-    }
-  ];
+  const [wallets, setWallets] = useState([
+    { id: 1, name: 'Wallet Principal', address: 'Starting backend...', balance: { main: 1247.58, vectors: [124.7, 87.3, 156.9, 92.1, 78.4, 201.2, 45.6, 133.8, 67.2] } },
+    { id: 2, name: 'Wallet Trading', address: '...', balance: { main: 856.32, vectors: [85.6, 62.1, 103.4, 71.8, 95.7, 128.3, 39.2, 88.9, 44.1] } }
+  ]);
+  const [transactions, setTransactions] = useState([]);
 
-  const transactions = [
-    { id: 1, type: 'received', amount: 125.50, address: 'inv3m9k1...8f2e', description: 'Réception paiement', reference: 'TXN-001', timestamp: '14:32' },
-    { id: 2, type: 'sent', amount: -87.25, address: 'inv4p2l7...6h9j', description: 'Transfert vers exchange', reference: 'TXN-002', timestamp: '12:15' },
-    { id: 3, type: 'received', amount: 256.80, address: 'inv5r8d4...2k1m', description: 'Staking rewards', reference: 'TXN-003', timestamp: '09:45' },
-    { id: 4, type: 'sent', amount: -42.10, address: 'inv6t3n9...5l8p', description: 'Frais de réseau', reference: 'TXN-004', timestamp: 'Hier' },
-    { id: 5, type: 'received', amount: 189.75, address: 'inv7v5s1...7n4q', description: 'Paiement service', reference: 'TXN-005', timestamp: 'Hier' },
-  ];
+  useEffect(() => {
+    if (window.electronAPI) {
+      const cleanup = window.electronAPI.onBackendEvent((eventName, data) => {
+        console.log(`Received backend event: ${eventName}`, data);
+        if (eventName === 'node-ready') {
+          setWallets(currentWallets => {
+            const newWallets = [...currentWallets];
+            newWallets[0] = { ...newWallets[0], address: data.peerId };
+            return newWallets;
+          });
+        }
+        if (eventName === 'new-transaction') {
+            const newTx = {
+                id: Date.now(), // Using timestamp for unique key
+                type: 'received', // Simplified for now
+                amount: data.type === 'PAYMENT' ? 10 : 0, // Mock amount
+                address: '... from backend',
+                description: `New ${data.type} Transaction`,
+                reference: 'N/A',
+                timestamp: new Date().toLocaleTimeString()
+            };
+            setTransactions(currentTxs => [newTx, ...currentTxs]);
+        }
+      });
+
+      return cleanup; // Cleanup listener on component unmount
+    }
+  }, []);
 
   const conversionRates = [0.1, 0.07, 0.126, 0.074, 0.063, 0.162, 0.037, 0.108, 0.054];
 
