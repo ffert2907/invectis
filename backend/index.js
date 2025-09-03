@@ -15,6 +15,7 @@ import {
   createInformationPayload
 } from './transaction.js'
 import { VECTORS } from './vectors.js';
+import { formatTransactionForFrontend } from './api.js'
 import { multiaddr } from '@multiformats/multiaddr'
 import { peerIdFromString } from '@libp2p/peer-id'
 import readline from 'readline'
@@ -268,14 +269,21 @@ async function main() {
                   for (const cid of dagHeads) {
                     try {
                       const transaction = await j.get(cid)
-                      console.log(`CID: ${cid.toString()}`)
-                      console.dir(transaction, { depth: null }) // Pretty print the object
+                      const formatted = formatTransactionForFrontend(cid, transaction)
+
+                      logger.info(`\nCID: ${cid.toString()}`)
+
+                      logger.prod('--- Raw Transaction Object ---')
+                      console.dir(transaction, { depth: null })
+
+                      logger.prod('\n--- Formatted for Frontend ---')
+                      console.dir(formatted, { depth: null })
                     } catch (err) {
                       logger.error(`Could not retrieve transaction for CID ${cid.toString()}:`, err)
                     }
                   }
                 }
-                logger.prod('--------------------------\n')
+                logger.prod('----------------------------\n')
                 break
               case '1':
                 type = 'PAYMENT'
