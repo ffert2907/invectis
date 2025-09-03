@@ -1,18 +1,18 @@
 import { initializeWallet } from './wallet.js'
 import { createNode } from './p2p.js'
 import {
-  createPaymentTransaction,
+  createPaymentPayload,
   verifyTransaction,
   signTransaction,
-  createSetRateRatioTransaction,
-  createVectorTransaction,
-  createSetDailyBonusTransaction,
+  createSetRateRatioPayload,
+  createVectorPayload,
+  createSetDailyBonusPayload,
   updateRates,
-  createAskValidationAccountTransaction,
-  createAccountValidationTransaction,
-  createPollQuestionTransaction,
-  createPollAnswerTransaction,
-  createInformationTransaction
+  createAskValidationAccountPayload,
+  createAccountValidationPayload,
+  createPollQuestionPayload,
+  createPollAnswerPayload,
+  createInformationPayload
 } from './transaction.js'
 import { VECTORS } from './vectors.js';
 import { multiaddr } from '@multiformats/multiaddr'
@@ -22,6 +22,7 @@ import clipboardy from 'clipboardy'
 import { config, logger } from './config.js'
 import path from 'path'
 import { mkdir } from 'fs/promises'
+import { json } from '@helia/json'
 
 // Configuration des arguments de ligne de commande
 const peerAddress = process.argv[3]
@@ -36,6 +37,9 @@ const rl = readline.createInterface({
 const GLOBAL_LEDGER_TOPIC = '/invectis/global-ledger/1.0'
 
 async function main() {
+  // Garde une trace des "têtes" du DAG (transactions sans enfants)
+  let dagHeads = []
+
   try {
     logger.prod(`Lancement en mode: ${config.appMode}`)
 
@@ -51,6 +55,7 @@ async function main() {
     // Initialisation du nœud P2P
     logger.info('Initialisation du nœud P2P...')
     const node = await createNode(wallet.privateKey)
+    const j = json(node)
 
     // Augmenter l'objet wallet avec les informations dérivées du noeud
     wallet.peerId = node.libp2p.peerId
@@ -172,19 +177,28 @@ async function main() {
         logger.debug('  - Message décodé:', message)
 
         // Vérification de la transaction
-        const authorPeerId = peerIdFromString(message.from)
+        const authorPeerId = peerIdFromString(message.author)
         const isValid = await verifyTransaction(message, authorPeerId)
 
         if (isValid) {
-          logger.info(`\n💸 Transaction reçue et valide (type: ${message.type})`)
-          logger.info('De:', message.from)
-          logger.info('Description:', message.description)
-          logger.info('Reference:', message.reference)
+          const cid = await j.add(message)
+          logger.prod(`✅ Transaction valide reçue et stockée dans le DAG local. CID: ${cid.toString()}`)
+
+          // Gère la mise à jour des têtes du DAG
+          const parentStrings = message.parents || []
+          const remainingHeads = dagHeads.filter(h => !parentStrings.includes(h.toString()))
+          dagHeads = [...remainingHeads, cid]
+          logger.debug('Nouvelles têtes du DAG:', dagHeads.map(h => h.toString()))
+
+          logger.info(`\n💸 Transaction traitée (type: ${message.type})`)
+          logger.info('De:', message.author)
+          logger.info('Description:', message.payload.description)
+          logger.info('Reference:', message.payload.reference)
           logger.info('Horodatage:', new Date(message.timestamp).toLocaleString())
 
           switch (message.type) {
             case 'PAYMENT':
-              logger.info('Pour:', message.to)
+              logger.info('Pour:', message.payload.to)
               logger.info('Montant:', message.payload.amount, message.payload.currency)
               break;
             case 'SETRATERATIO':
@@ -193,7 +207,7 @@ async function main() {
               logger.info('Ratios de conversion mis à jour.')
               break;
             case 'VECTOR_TRANSACTION':
-              logger.info('Pour:', message.to)
+              logger.info('Pour:', message.payload.to)
               logger.info('Vecteurs:', message.payload.vectors)
               logger.info('Temps Total:', message.payload.totalTime)
               break;
@@ -201,26 +215,26 @@ async function main() {
               logger.info('Bonus journalier:', message.payload.bonus)
               break;
             case 'ASK_VALIDATION_ACCOUNT':
-              logger.info('Demande de validation de compte de:', message.from)
+              logger.info('Demande de validation de compte de:', message.author)
               logger.info('Message:', message.payload.message)
               break;
             case 'ACCOUNT_VALIDATION':
-              logger.info('Compte validé par:', message.from)
+              logger.info('Compte validé par:', message.author)
               logger.info('Validé:', message.payload.validated)
               break;
             case 'POLL_QUESTION':
-              logger.info('Sondage reçu de:', message.from)
+              logger.info('Sondage reçu de:', message.author)
               logger.info('Question:', message.payload.question)
               logger.info('Type:', message.payload.type)
               logger.info('Options:', message.payload.options)
               break;
             case 'POLL_ANSWER':
-              logger.info('Réponse au sondage reçue de:', message.from)
+              logger.info('Réponse au sondage reçue de:', message.author)
               logger.info('Sondage ID:', message.payload.pollId)
               logger.info('Réponse:', message.payload.answer)
               break;
             case 'INFORMATION':
-              logger.info('Information reçue de:', message.from)
+              logger.info('Information reçue de:', message.author)
               logger.info('Message:', message.payload.message)
               break;
             default:
@@ -240,56 +254,82 @@ async function main() {
       const recipientPeerId = peerIdFromString(ma.getPeerId())
 
       const askForTransaction = () => {
-        rl.question('\nType de transaction (1: Payment, 2: Vector, 3: SetRates, 4: DailyBonus, 5: AskValidation, 6: ValidateAccount, 7: PollQuestion, 8: PollAnswer, 9: Information)? ', async (choice) => {
-          let transaction
+        rl.question('\n(1: Payment, 2: Vector, 3: SetRates, 4: DailyBonus, 5: AskValidation, 6: ValidateAccount, 7: PollQuestion, 8: PollAnswer, 9: Information, 0: Log Heads)? ', async (choice) => {
+          let payload
+          let type
+
           try {
             switch (choice) {
+              case '0':
+                logger.prod('\n--- Current Ledger Heads ---')
+                if (dagHeads.length === 0) {
+                  logger.info('Ledger is empty.')
+                } else {
+                  for (const cid of dagHeads) {
+                    try {
+                      const transaction = await j.get(cid)
+                      console.log(`CID: ${cid.toString()}`)
+                      console.dir(transaction, { depth: null }) // Pretty print the object
+                    } catch (err) {
+                      logger.error(`Could not retrieve transaction for CID ${cid.toString()}:`, err)
+                    }
+                  }
+                }
+                logger.prod('--------------------------\n')
+                break
               case '1':
-                transaction = createPaymentTransaction(wallet, recipientPeerId, 'Payment', 'ref-payment-001')
+                type = 'PAYMENT'
+                payload = createPaymentPayload(wallet, recipientPeerId, 'Payment', 'ref-payment-001')
                 break
               case '2':
+                type = 'VECTOR_TRANSACTION'
                 const vectorValues = {}
                 for (const vector of VECTORS) {
                   vectorValues[vector[0]] = Math.floor(Math.random() * 10)
                 }
                 logger.info('Sending random vector values:', vectorValues)
-                transaction = await createVectorTransaction(wallet, recipientPeerId, vectorValues, 'Vector Transaction', 'ref-vector-001')
+                payload = await createVectorPayload(wallet, recipientPeerId, vectorValues, 'Vector Transaction', 'ref-vector-001')
                 break
               case '3':
+                type = 'SETRATERATIO'
                 const newRates = {}
                 for (const vector of VECTORS) {
                   newRates[vector[0]] = Math.random() * 2
                 }
                 logger.info('Sending random rates:', newRates)
-                transaction = createSetRateRatioTransaction(wallet, newRates, 'Set Rate Ratio', 'ref-rates-001')
+                payload = createSetRateRatioPayload(wallet, newRates, 'Set Rate Ratio', 'ref-rates-001')
                 break
               case '4':
+                type = 'SETDAILYBONUS'
                 const walletBalance = Math.random() * 20
                 const dailyTransactionSum = (Math.random() * 20) - 10
                 logger.info(`Calculating bonus for balance ${walletBalance} and daily sum ${dailyTransactionSum}`)
-                transaction = createSetDailyBonusTransaction(wallet, walletBalance, dailyTransactionSum, 'Daily Bonus', 'ref-bonus-001')
+                payload = createSetDailyBonusPayload(wallet, walletBalance, dailyTransactionSum, 'Daily Bonus', 'ref-bonus-001')
                 break
               case '5':
-                transaction = createAskValidationAccountTransaction(wallet, recipientPeerId, 'Ask for validation', 'ref-ask-validation-001')
+                type = 'ASK_VALIDATION_ACCOUNT'
+                payload = createAskValidationAccountPayload(wallet, recipientPeerId, 'Ask for validation', 'ref-ask-validation-001')
                 logger.info('Demande de validation envoyée à:', recipientPeerId.toString())
                 break
               case '6':
-                transaction = createAccountValidationTransaction(wallet, recipientPeerId, 'Account validation', 'ref-validation-001')
+                type = 'ACCOUNT_VALIDATION'
+                payload = createAccountValidationPayload(wallet, recipientPeerId, 'Account validation', 'ref-validation-001')
                 logger.info('Validation de compte envoyée à:', recipientPeerId.toString())
                 break
               case '7':
-                // For simplicity, we'll use a hardcoded poll
-                transaction = createPollQuestionTransaction(wallet, 'What is your favorite color?', 'radio', ['Red', 'Green', 'Blue'], 'Color Poll', 'ref-poll-q-001')
+                type = 'POLL_QUESTION'
+                payload = createPollQuestionPayload(wallet, 'What is your favorite color?', 'radio', ['Red', 'Green', 'Blue'], 'Color Poll', 'ref-poll-q-001')
                 logger.info('Sondage envoyé.')
                 break
               case '8':
-                // Answering a hardcoded pollId, in a real app you'd get this from a received poll
+                type = 'POLL_ANSWER'
                 const pollId = Date.now() - 10000 // -10sec
-                transaction = createPollAnswerTransaction(wallet, pollId, 'Blue', 'Color Poll Answer', 'ref-poll-a-001')
+                payload = createPollAnswerPayload(wallet, pollId, 'Blue', 'Color Poll Answer', 'ref-poll-a-001')
                 logger.info('Réponse au sondage envoyée.')
                 break
               case '9':
-                transaction = createInformationTransaction(wallet, 'This is a broadcast information message.', 'Information', 'ref-info-001')
+                type = 'INFORMATION'
+                payload = createInformationPayload(wallet, 'This is a broadcast information message.', 'Information', 'ref-info-001')
                 logger.info('Information envoyée.')
                 break
               default:
@@ -298,11 +338,31 @@ async function main() {
                 return
             }
 
-            if (transaction) {
-              const signedTransaction = await signTransaction(transaction, wallet.sign)
+            if (payload) {
+              // Construire le noeud du DAG
+              const transactionToSign = {
+                parents: dagHeads.map(cid => cid.toString()), // Convert CIDs to strings for signing
+                author: wallet.peerId.toString(),
+                timestamp: Date.now(),
+                type,
+                payload
+              }
+
+              const signedTransaction = await signTransaction(transactionToSign, wallet.sign)
+
+              // Stocke la transaction dans le blockstore local pour obtenir un CID
+              const cid = await j.add(signedTransaction)
+              logger.prod(`✅ Transaction créée et stockée localement. CID: ${cid.toString()}`)
+
+              // Met à jour la tête du DAG
+              const parentStrings = signedTransaction.parents || []
+              const remainingHeads = dagHeads.filter(h => !parentStrings.includes(h.toString()))
+              dagHeads = [...remainingHeads, cid]
+              logger.debug('Nouvelles têtes du DAG:', dagHeads.map(h => h.toString()))
+
               const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction))
               await node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, messageBytes)
-              logger.info('✅ Transaction envoyée!')
+              logger.info('✅ Transaction publiée sur le réseau!')
             }
           } catch (error) {
             logger.error('Erreur d\'envoi:', error.message)
