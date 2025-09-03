@@ -41,19 +41,14 @@ export async function updateRates(newRates) {
  * @param {string} accountType - Le type de compte de l'expéditeur
  * @returns {Object} - Transaction non signée
  */
-export function createPaymentTransaction(wallet, recipientPeerId, description, reference) {
+export function createPaymentPayload(wallet, recipientPeerId, description, reference) {
   // No rights check for this transaction type
   return {
-    type: 'PAYMENT',
-    from: wallet.peerId.toString(),
     to: recipientPeerId.toString(),
-    timestamp: Date.now(),
     description: description || '',
     reference: reference || '',
-    payload: {
-      amount: Math.floor(Math.random() * 100) + 1,
-      currency: 'TOKEN'
-    }
+    amount: Math.floor(Math.random() * 100) + 1,
+    currency: 'TOKEN'
   }
 }
 
@@ -63,18 +58,13 @@ export function createPaymentTransaction(wallet, recipientPeerId, description, r
  * @param {PeerId} recipientPeerId - Identité du destinataire de la demande
  * @returns {Object} - Transaction non signée
  */
-export function createAskValidationAccountTransaction(wallet, recipientPeerId, description, reference) {
+export function createAskValidationAccountPayload(wallet, recipientPeerId, description, reference) {
   hasRight(wallet.accountType, 'ASK_VALIDATION_ACCOUNT')
   return {
-    type: 'ASK_VALIDATION_ACCOUNT',
-    from: wallet.peerId.toString(),
     to: recipientPeerId.toString(),
-    timestamp: Date.now(),
     description: description || '',
     reference: reference || '',
-    payload: {
-      message: 'Please provide your identity information for validation.'
-    }
+    message: 'Please provide your identity information for validation.'
   }
 }
 
@@ -84,17 +74,12 @@ export function createAskValidationAccountTransaction(wallet, recipientPeerId, d
  * @param {string} message - Le message d'information
  * @returns {Object} - Transaction non signée
  */
-export function createInformationTransaction(wallet, message, description, reference) {
+export function createInformationPayload(wallet, message, description, reference) {
   hasRight(wallet.accountType, 'INFORMATION')
   return {
-    type: 'INFORMATION',
-    from: wallet.peerId.toString(),
-    timestamp: Date.now(),
     description: description || '',
     reference: reference || '',
-    payload: {
-      message
-    }
+    message
   }
 }
 
@@ -106,21 +91,16 @@ export function createInformationTransaction(wallet, message, description, refer
  * @param {Array<string>} options - Les options de réponse
  * @returns {Object} - Transaction non signée
  */
-export function createPollQuestionTransaction(wallet, question, type, options, description, reference) {
+export function createPollQuestionPayload(wallet, question, type, options, description, reference) {
   hasRight(wallet.accountType, 'POLL_QUESTION')
   const pollId = Date.now()
   return {
-    type: 'POLL_QUESTION',
-    from: wallet.peerId.toString(),
-    timestamp: pollId,
     description: description || '',
     reference: reference || '',
-    payload: {
-      pollId,
-      question,
-      type,
-      options
-    }
+    pollId,
+    question,
+    type,
+    options
   }
 }
 
@@ -131,18 +111,13 @@ export function createPollQuestionTransaction(wallet, question, type, options, d
  * @param {string|Array<string>} answer - La réponse
  * @returns {Object} - Transaction non signée
  */
-export function createPollAnswerTransaction(wallet, pollId, answer, description, reference) {
+export function createPollAnswerPayload(wallet, pollId, answer, description, reference) {
   // No rights check for this transaction type
   return {
-    type: 'POLL_ANSWER',
-    from: wallet.peerId.toString(),
-    timestamp: Date.now(),
     description: description || '',
     reference: reference || '',
-    payload: {
-      pollId,
-      answer
-    }
+    pollId,
+    answer
   }
 }
 
@@ -152,18 +127,13 @@ export function createPollAnswerTransaction(wallet, pollId, answer, description,
  * @param {PeerId} recipientPeerId - Identité du compte qui est validé
  * @returns {Object} - Transaction non signée
  */
-export function createAccountValidationTransaction(wallet, recipientPeerId, description, reference) {
+export function createAccountValidationPayload(wallet, recipientPeerId, description, reference) {
   // No rights check for this transaction type
   return {
-    type: 'ACCOUNT_VALIDATION',
-    from: wallet.peerId.toString(),
     to: recipientPeerId.toString(),
-    timestamp: Date.now(),
     description: description || '',
     reference: reference || '',
-    payload: {
-      validated: true
-    }
+    validated: true
   }
 }
 
@@ -173,7 +143,7 @@ export function createAccountValidationTransaction(wallet, recipientPeerId, desc
  * @param {object} newRates - Les nouveaux ratios pour les vecteurs
  * @returns {Object} - Transaction non signée
  */
-export function createSetRateRatioTransaction(wallet, newRates, description, reference) {
+export function createSetRateRatioPayload(wallet, newRates, description, reference) {
   hasRight(wallet.accountType, 'SETRATERATIO')
   // Validation simple pour s'assurer que les nouveaux taux sont valides
   for (const vector of VECTORS) {
@@ -184,16 +154,11 @@ export function createSetRateRatioTransaction(wallet, newRates, description, ref
   }
 
   return {
-    type: 'SETRATERATIO',
-    from: wallet.peerId.toString(),
-    timestamp: Date.now(),
     description: description || '',
     reference: reference || '',
-    payload: {
-      rates: newRates,
-      country: wallet.country,
-      city: wallet.city
-    }
+    rates: newRates,
+    country: wallet.country,
+    city: wallet.city
   }
 }
 
@@ -204,7 +169,7 @@ export function createSetRateRatioTransaction(wallet, newRates, description, ref
  * @param {number} dailyTransactionSum - La somme des transactions de la journée en "Heure"
  * @returns {Object} - Transaction non signée
  */
-export function createSetDailyBonusTransaction(wallet, walletBalance, dailyTransactionSum, description, reference) {
+export function createSetDailyBonusPayload(wallet, walletBalance, dailyTransactionSum, description, reference) {
   hasRight(wallet.accountType, 'SETDAILYBONUS')
   let bonus = 0
   if (walletBalance < 8) {
@@ -227,14 +192,9 @@ export function createSetDailyBonusTransaction(wallet, walletBalance, dailyTrans
   }
 
   return {
-    type: 'SETDAILYBONUS',
-    from: wallet.peerId.toString(),
-    timestamp: Date.now(),
     description: description || '',
     reference: reference || '',
-    payload: {
-      bonus: bonus
-    }
+    bonus: bonus
   }
 }
 
@@ -245,7 +205,7 @@ export function createSetDailyBonusTransaction(wallet, walletBalance, dailyTrans
  * @param {object} vectorValues - Les valeurs pour chaque vecteur
  * @returns {Promise<Object>} - Transaction non signée
  */
-export async function createVectorTransaction(wallet, recipientPeerId, vectorValues, description, reference) {
+export async function createVectorPayload(wallet, recipientPeerId, vectorValues, description, reference) {
   hasRight(wallet.accountType, 'VECTOR_TRANSACTION')
   const { currentRates } = await getRates()
   let totalTime = 0
@@ -260,16 +220,11 @@ export async function createVectorTransaction(wallet, recipientPeerId, vectorVal
   }
 
   return {
-    type: 'VECTOR_TRANSACTION',
-    from: wallet.peerId.toString(),
     to: recipientPeerId.toString(),
-    timestamp: Date.now(),
     description: description || '',
     reference: reference || '',
-    payload: {
-      vectors: vectorValues,
-      totalTime: totalTime
-    }
+    vectors: vectorValues,
+    totalTime: totalTime
   }
 }
 
