@@ -278,7 +278,6 @@ async function main() {
 
                       logger.prod('\n--- Formatted for Frontend ---')
                       console.dir(formatted, { depth: null })
-
                     } catch (err) {
                       logger.error(`Could not retrieve transaction for CID ${cid.toString()}:`, err)
                     }
