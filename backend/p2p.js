@@ -6,13 +6,20 @@ import { yamux } from '@chainsafe/libp2p-yamux'
 import { identify } from '@libp2p/identify'
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { createHelia } from 'helia'
+import { LevelDatastore } from 'datastore-level'
+import path from 'path'
 
 /**
  * Crée et configure un nœud P2P avec Helia et support WebSockets
  * @param {import('@libp2p/interface-keys').PrivateKey} privateKey - La clé privée du noeud
+ * @param {string} datastorePath - Le chemin vers le répertoire de la base de données locale
  * @returns {Promise<Helia>} - Instance Helia configurée
  */
-export async function createNode(privateKey) {
+export async function createNode(privateKey, datastorePath) {
+  // Configure la base de données locale pour le stockage
+  const datastore = new LevelDatastore(datastorePath)
+  await datastore.open()
+
   console.log('🔍 DEBUG: Configuration du nœud libp2p...')
   
   // Configuration de libp2p avec WebSockets
@@ -72,8 +79,9 @@ export async function createNode(privateKey) {
 
   console.log('🔍 DEBUG: Création de l\'instance Helia...')
   // Création de l'instance Helia à partir de libp2p
-  const helia = await createHelia({ 
+  const helia = await createHelia({
     libp2p,
+    datastore,
     // Configuration additionnelle pour Helia
     start: false // On démarre manuellement
   })

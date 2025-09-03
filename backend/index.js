@@ -27,6 +27,7 @@ import { json } from '@helia/json'
 
 // Configuration des arguments de ligne de commande
 const peerAddress = process.argv[3]
+const customDataDir = process.argv[4] // Argument optionnel pour le répertoire de données
 
 // Configuration de readline pour l'entrée utilisateur
 const rl = readline.createInterface({
@@ -53,9 +54,15 @@ async function main() {
     logger.info('Initialisation du portefeuille...')
     const wallet = await initializeWallet(walletFile, rl)
 
+    // Détermine le chemin du datastore
+    const datastorePath = customDataDir
+      ? path.join('data', customDataDir)
+      : path.join('data', 'helia')
+    logger.prod(`Utilisation du datastore: ${datastorePath}`)
+
     // Initialisation du nœud P2P
     logger.info('Initialisation du nœud P2P...')
-    const node = await createNode(wallet.privateKey)
+    const node = await createNode(wallet.privateKey, datastorePath)
     const j = json(node)
 
     // Augmenter l'objet wallet avec les informations dérivées du noeud
@@ -278,6 +285,7 @@ async function main() {
 
                       logger.prod('\n--- Formatted for Frontend ---')
                       console.dir(formatted, { depth: null })
+
                     } catch (err) {
                       logger.error(`Could not retrieve transaction for CID ${cid.toString()}:`, err)
                     }
