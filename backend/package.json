@@ -22,8 +22,10 @@
     "@multiformats/multiaddr": "^12.5.1",
     "@noble/curves": "^2.0.0",
     "clipboardy": "^4.0.0",
+    "datastore-level": "^10.0.0",
     "dotenv": "^17.2.1",
     "helia": "^5.5.1",
+    "@helia/json": "^4.0.7",
     "libp2p": "^2.10.0"
   }
 }
