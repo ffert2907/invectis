@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const { readFile } = require('fs/promises');
 
 process.env.DIST = path.join(__dirname, '../dist')
 process.env.PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, '../public')
@@ -42,3 +43,22 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(createWindow)
+
+ipcMain.handle('open-file-dialog', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    properties: ['openFile'],
+  });
+  if (!canceled) {
+    return filePaths[0];
+  }
+});
+
+ipcMain.handle('read-file-content', async (event, filePath) => {
+  try {
+    const content = await readFile(filePath, 'utf-8');
+    return content;
+  } catch (error) {
+    console.error('Failed to read file content:', error);
+    return null;
+  }
+});

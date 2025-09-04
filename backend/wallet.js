@@ -77,3 +77,38 @@ export async function initializeWallet(filePath, rl) {
     nationalIdHash
   }
 }
+
+export async function createWallet(filePath, { country, city, nationalId, accountType }) {
+  const nationalIdHash = createHash('sha256').update(nationalId.trim()).digest('hex');
+  const libp2pCrypto = await import('@libp2p/crypto');
+  const privateKey = await libp2pCrypto.keys.generateKeyPair('Ed25519');
+  const marshalledKey = libp2pCrypto.keys.privateKeyToProtobuf(privateKey);
+
+  const walletData = {
+    version: '1.0',
+    type: 'Ed25519',
+    accountType,
+    country: country.trim(),
+    city: city.trim(),
+    nationalIdHash,
+    privateKey: Buffer.from(marshalledKey).toString('base64'),
+    created: new Date().toISOString()
+  };
+
+  await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8');
+
+  // Verify that the file was created
+  try {
+    await readFile(filePath, 'utf8');
+  } catch (error) {
+    logger.error('Failed to verify wallet file creation:', error);
+    throw new Error('Failed to save wallet file.');
+  }
+
+  logger.info(`✅ New wallet created and saved (Account Type: ${accountType})`);
+
+  return {
+    privateKey,
+    ...walletData
+  };
+}
