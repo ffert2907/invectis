@@ -4,6 +4,14 @@ import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, More
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedWallet, setSelectedWallet] = useState(0);
+  const [walletCreationStep, setWalletCreationStep] = useState(null);
+  const [newWallet, setNewWallet] = useState({
+    name: '',
+    country: '',
+    city: '',
+    idNumber: '',
+    type: 'individual'
+  });
   const [showBalance, setShowBalance] = useState(true);
   const [showVectorDetails, setShowVectorDetails] = useState({});
 
@@ -252,7 +260,10 @@ function App() {
             </div>
           ))}
 
-          <button className="w-full bg-green-800 text-white font-semibold py-4 rounded-2xl border-2 border-dashed border-green-600 hover:bg-green-700 transition-colors">
+          <button
+            onClick={() => setCurrentView('addWalletInfo')}
+            className="w-full bg-green-800 text-white font-semibold py-4 rounded-2xl border-2 border-dashed border-green-600 hover:bg-green-700 transition-colors"
+          >
             + Ajouter un wallet
           </button>
         </div>
@@ -464,12 +475,180 @@ function App() {
     </div>
   );
 
+  const renderAddWalletInfo = () => (
+    <div className="flex flex-col h-full bg-gray-900 p-6">
+      <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-3xl shadow-lg text-white">
+        <h1 className="text-2xl font-bold mb-4">Ajouter un Wallet</h1>
+        <p className="text-green-200 mb-6">
+          Vous allez ajouter un nouveau wallet. Vous pouvez en un wallet individuel si vous n'en avez pas encore (un seul par personne) ou plusieurs wallets entreprises. Vous pouvez ajouter le wallet d'une autre personne en co-gestion ; dans ce cas le propriétaire doit vous donner les droits sur son wallet et peut les retirer à tout moment.
+        </p>
+        <p className="text-green-200 font-semibold">
+          Choisissez Nouveau Wallet ou Wallet Existant.
+        </p>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center space-y-4">
+        <button
+          onClick={() => setCurrentView('createWalletForm')}
+          className="bg-amber-500 text-gray-900 font-semibold py-4 rounded-2xl"
+        >
+          Créer un nouveau Wallet
+        </button>
+        <button
+          onClick={async () => {
+            if (window.electronAPI) {
+              const filePath = await window.electronAPI.openFileDialog();
+              if (filePath) {
+                const walletData = await window.electronAPI.readFileContent(filePath);
+                if (walletData) {
+                  try {
+                    const response = await fetch('http://localhost:3001/wallets/import', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({ name: 'Imported Wallet', walletData }),
+                    });
+                    if (response.ok) {
+                      alert('Wallet imported successfully');
+                      setCurrentView('wallets');
+                    } else {
+                      alert('Failed to import wallet');
+                    }
+                  } catch (error) {
+                    console.error('Error importing wallet:', error);
+                    alert('Error importing wallet');
+                  }
+                }
+              }
+            } else {
+              alert('Import wallet functionality not available in this environment.');
+            }
+          }}
+          className="bg-green-700 text-white font-semibold py-4 rounded-2xl"
+        >
+          Importer un Wallet déjà existant
+        </button>
+      </div>
+
+      <div className="text-center">
+        <button
+          onClick={() => setCurrentView('wallets')}
+          className="text-gray-400"
+        >
+          Annuler
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderCreateWalletForm = () => (
+    <div className="flex flex-col h-full bg-gray-900 p-6">
+      <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-3xl shadow-lg text-white">
+        <h1 className="text-2xl font-bold mb-4">Créer un nouveau Wallet</h1>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center space-y-4 text-white">
+        <input
+          type="text"
+          placeholder="Nom du Wallet"
+          value={newWallet.name}
+          onChange={(e) => setNewWallet({ ...newWallet, name: e.target.value })}
+          className="bg-gray-800 p-3 rounded-lg"
+        />
+        <input
+          type="text"
+          placeholder="Pays de résidence"
+          value={newWallet.country}
+          onChange={(e) => setNewWallet({ ...newWallet, country: e.target.value })}
+          className="bg-gray-800 p-3 rounded-lg"
+        />
+        <input
+          type="text"
+          placeholder="Ville"
+          value={newWallet.city}
+          onChange={(e) => setNewWallet({ ...newWallet, city: e.target.value })}
+          className="bg-gray-800 p-3 rounded-lg"
+        />
+        <input
+          type="text"
+          placeholder="Numéro d'identité nationale"
+          value={newWallet.idNumber}
+          onChange={(e) => setNewWallet({ ...newWallet, idNumber: e.target.value })}
+          className="bg-gray-800 p-3 rounded-lg"
+        />
+        <div className="flex justify-around">
+          <label className="flex items-center">
+            <input
+              type="radio"
+              name="walletType"
+              value="individual"
+              checked={newWallet.type === 'individual'}
+              onChange={(e) => setNewWallet({ ...newWallet, type: e.target.value })}
+              className="mr-2"
+            />
+            Individual
+          </label>
+          <label className="flex items-center">
+            <input
+              type="radio"
+              name="walletType"
+              value="entreprise"
+              checked={newWallet.type === 'entreprise'}
+              onChange={(e) => setNewWallet({ ...newWallet, type: e.target.value })}
+              className="mr-2"
+            />
+            Entreprise
+          </label>
+        </div>
+        <button
+          onClick={async () => {
+            try {
+              const response = await fetch('http://localhost:3001/wallets', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(newWallet),
+              });
+              if (response.ok) {
+                const createdWallet = await response.json();
+                setWallets([...wallets, createdWallet]);
+                setCurrentView('wallets');
+                setNewWallet({ name: '', country: '', city: '', idNumber: '', type: 'individual' });
+              } else {
+                alert('Failed to create wallet');
+              }
+            } catch (error) {
+              console.error('Error creating wallet:', error);
+              alert('Error creating wallet');
+            }
+          }}
+          className="bg-amber-500 text-gray-900 font-semibold py-4 rounded-2xl"
+        >
+          Créer
+        </button>
+      </div>
+
+      <div className="text-center">
+        <button
+          onClick={() => setCurrentView('addWalletInfo')}
+          className="text-gray-400"
+        >
+          Retour
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="w-full max-w-md mx-auto h-screen bg-gray-900 relative overflow-hidden">
       {currentView === 'dashboard' && renderDashboard()}
       {currentView === 'wallets' && renderWallets()}
       {currentView === 'account' && renderAccount()}
       {currentView === 'settings' && renderSettings()}
+      {currentView === 'addWalletInfo' && renderAddWalletInfo()}
+      {currentView === 'createWalletForm' && renderCreateWalletForm()}
     </div>
   );
 };
