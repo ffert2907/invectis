@@ -12,5 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => {
       ipcRenderer.removeListener('backend-event', listener);
     };
-  }
+  },
+  openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
+  readFileContent: (filePath) => ipcRenderer.invoke('read-file-content', filePath)
 });
