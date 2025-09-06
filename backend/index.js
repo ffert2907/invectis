@@ -46,15 +46,16 @@ async function main() {
     // Création du répertoire de données et définition du chemin du portefeuille
     const dataDir = path.join(__dirname, 'data')
     await mkdir(dataDir, { recursive: true })
-    const walletFile = path.join(dataDir, process.argv[2] || 'wallet.dat')
+    const walletFileName = process.argv[2] || 'wallet.dat'
+    const walletFile = path.join(dataDir, walletFileName)
 
     // Initialisation du portefeuille (interactive)
     const wallet = await initializeWallet(walletFile, rl)
 
     // Détermine le chemin du datastore
     const datastorePath = customDataDir
-      ? path.join('data', customDataDir)
-      : path.join('data', 'helia_console') // Use a different datastore for console mode
+      ? path.join(dataDir, customDataDir)
+      : path.join(dataDir, `helia_${path.basename(walletFileName, '.dat')}`) // Derive from wallet name
     logger.prod(`Using datastore: ${datastorePath}`)
 
     // Start the core P2P node
