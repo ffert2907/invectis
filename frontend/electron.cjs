@@ -16,6 +16,9 @@ function createWindow() {
     },
   })
 
+  // Add this line to open the developer tools
+  win.webContents.openDevTools()
+  
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
