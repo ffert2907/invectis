@@ -347,14 +347,7 @@ function App() {
             </div>
           ))}
 
-//<<<<<<< feat/add-wallet-feature
           <button onClick={() => setCurrentView('addWalletInfo')} className="w-full bg-green-800 text-white font-semibold py-4 rounded-2xl border-2 border-dashed border-green-600 hover:bg-green-700 transition-colors">
-//=======
-//          <button
-//            onClick={() => setCurrentView('addWalletInfo')}
-//            className="w-full bg-green-800 text-white font-semibold py-4 rounded-2xl border-2 border-dashed border-green-600 hover:bg-green-700 transition-colors"
-//          >
-//>>>>>>> main
             + Ajouter un wallet
           </button>
         </div>
@@ -598,18 +591,11 @@ function App() {
                       headers: {
                         'Content-Type': 'application/json',
                       },
-//<<<<<<< feat/add-wallet-feature
                       body: JSON.stringify({ name: filePath.split(/[\\/]/).pop().replace('.json', ''), walletData }),
                     });
                     if (response.ok) {
                       alert('Wallet imported successfully');
                       await fetchWallets();
-//=======
-//                      body: JSON.stringify({ name: 'Imported Wallet', walletData }),
-//                    });
-//                    if (response.ok) {
-//                      alert('Wallet imported successfully');
-//>>>>>>> main
                       setCurrentView('wallets');
                     } else {
                       alert('Failed to import wallet');
@@ -711,12 +697,7 @@ function App() {
                 body: JSON.stringify(newWallet),
               });
               if (response.ok) {
-//<<<<<<< feat/add-wallet-feature
                 await fetchWallets();
-//=======
-//                const createdWallet = await response.json();
-//                setWallets([...wallets, createdWallet]);
-//>>>>>>> main
                 setCurrentView('wallets');
                 setNewWallet({ name: '', country: '', city: '', idNumber: '', type: 'individual' });
               } else {
