@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle } from 'lucide-react';
+import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star } from 'lucide-react';
+import QRCode from 'qrcode.react';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedWallet, setSelectedWallet] = useState(0);
+  const [principalWalletId, setPrincipalWalletId] = useState(null);
   const [walletCreationStep, setWalletCreationStep] = useState(null);
   const [newWallet, setNewWallet] = useState({
     name: '',
@@ -14,11 +16,10 @@ function App() {
   });
   const [showBalance, setShowBalance] = useState(true);
   const [showVectorDetails, setShowVectorDetails] = useState({});
+  const [status, setStatus] = useState({ peerId: '', connections: 0 });
+  const [showQrModal, setShowQrModal] = useState(false);
 
-  const [wallets, setWallets] = useState([
-    { id: 1, name: 'Wallet Principal', address: 'Starting backend...', balance: { main: 1247.58, vectors: [124.7, 87.3, 156.9, 92.1, 78.4, 201.2, 45.6, 133.8, 67.2] } },
-    { id: 2, name: 'Wallet Trading', address: '...', balance: { main: 856.32, vectors: [85.6, 62.1, 103.4, 71.8, 95.7, 128.3, 39.2, 88.9, 44.1] } }
-  ]);
+  const [wallets, setWallets] = useState([]);
   const [transactions, setTransactions] = useState([]);
 
   useEffect(() => {
@@ -50,6 +51,61 @@ function App() {
     }
   }, []);
 
+  const fetchWallets = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/wallets');
+      if (response.ok) {
+        const fetchedWallets = await response.json();
+        setWallets(fetchedWallets);
+      } else {
+        console.error('Failed to fetch wallets');
+      }
+    } catch (error) {
+      console.error('Error fetching wallets:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchWallets();
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch('http://localhost:3001/status');
+        if (response.ok) {
+          const newStatus = await response.json();
+          setStatus(newStatus);
+        } else {
+          console.error('Failed to fetch status');
+        }
+      } catch (error) {
+        console.error('Error fetching status:', error);
+      }
+    }, 5000); // Fetch status every 5 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const storedPrincipalWalletId = localStorage.getItem('principalWalletId');
+    if (storedPrincipalWalletId) {
+      setPrincipalWalletId(JSON.parse(storedPrincipalWalletId));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (principalWalletId) {
+      localStorage.setItem('principalWalletId', JSON.stringify(principalWalletId));
+    }
+  }, [principalWalletId]);
+
+  useEffect(() => {
+    if (principalWalletId) {
+      const walletIndex = wallets.findIndex(wallet => wallet.id === principalWalletId);
+      if (walletIndex !== -1) {
+        setSelectedWallet(walletIndex);
+      }
+    }
+  }, [principalWalletId, wallets]);
+
   const conversionRates = [0.1, 0.07, 0.126, 0.074, 0.063, 0.162, 0.037, 0.108, 0.054];
 
   const toggleVectorDetails = (txId) => {
@@ -61,12 +117,22 @@ function App() {
 
   const renderDashboard = () => (
     <div className="flex flex-col h-full bg-gray-900">
+      {/* QR Code Modal */}
+      {showQrModal && (
+        <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center">
+          <div className="bg-white p-8 rounded-lg text-center">
+            <h2 className="text-lg font-bold mb-4">Scan QR Code to Connect</h2>
+            <QRCode value={status.peerId} size={256} />
+            <button onClick={() => setShowQrModal(false)} className="mt-4 bg-gray-800 text-white px-4 py-2 rounded-md">Close</button>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl shadow-lg">
         <div className="flex justify-between items-center mb-4">
           <div>
             <h1 className="text-2xl font-bold text-white">Invectis</h1>
-            <p className="text-green-200 text-sm">{wallets[selectedWallet].name}</p>
+            <p className="text-green-200 text-sm">{wallets[selectedWallet]?.name}</p>
           </div>
           <div className="flex space-x-3">
             <button
@@ -81,11 +147,29 @@ function App() {
           </div>
         </div>
 
+        {/* Peer ID and Status */}
+        <div className="bg-gray-800/50 rounded-2xl p-4 mb-6 text-white">
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-sm text-gray-400">Your Peer ID:</p>
+              <p className="font-mono text-sm truncate">{status.peerId}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-gray-400">Connections:</p>
+              <p className="text-lg font-bold">{status.connections}</p>
+            </div>
+          </div>
+          <div className="flex justify-end space-x-2 mt-2">
+            <button onClick={() => navigator.clipboard.writeText(status.peerId)} className="text-xs bg-gray-700 px-2 py-1 rounded-md">Copy ID</button>
+            <button onClick={() => setShowQrModal(true)} className="text-xs bg-gray-700 px-2 py-1 rounded-md">Show QR</button>
+          </div>
+        </div>
+
         {/* Balance Principal */}
         <div className="text-center mb-6">
           <p className="text-green-200 text-sm mb-1">Solde Principal</p>
           <h2 className="text-4xl font-bold text-white mb-1">
-            {showBalance ? `${wallets[selectedWallet].balance.main.toFixed(2)}` : '••••••'}
+            {showBalance && wallets[selectedWallet] ? `${wallets[selectedWallet].balance.main.toFixed(2)}` : '••••••'}
           </h2>
           <p className="text-green-200 text-sm flex items-center justify-center">
             <Clock className="w-4 h-4 mr-1" />
@@ -100,7 +184,7 @@ function App() {
             <TrendingUp className="w-4 h-4 text-amber-400" />
           </div>
           <div className="grid grid-cols-9 gap-1 mb-3">
-            {wallets[selectedWallet].balance.vectors.map((value, index) => (
+            {wallets[selectedWallet]?.balance.vectors.map((value, index) => (
               <div key={index} className="flex flex-col items-center">
                 <div
                   className="w-4 bg-gradient-to-t from-green-600 to-amber-400 rounded-sm mb-1"
@@ -110,7 +194,7 @@ function App() {
               </div>
             ))}
           </div>
-          {showBalance && (
+          {showBalance && wallets[selectedWallet] && (
             <div className="grid grid-cols-3 gap-2 text-xs">
               {wallets[selectedWallet].balance.vectors.slice(0, 9).map((value, index) => (
                 <div key={index} className="text-center">
@@ -255,15 +339,22 @@ function App() {
                     <p className="text-green-400 font-medium">{wallet.balance.main.toFixed(2)} IVT-h</p>
                   </div>
                 </div>
+                <button onClick={(e) => { e.stopPropagation(); setPrincipalWalletId(wallet.id); }} className="p-2 -m-2">
+                  <Star className={`w-5 h-5 ${principalWalletId === wallet.id ? 'text-yellow-400 fill-current' : 'text-gray-600'}`} />
+                </button>
                 <ChevronRight className="w-5 h-5 text-gray-400" />
               </div>
             </div>
           ))}
 
-          <button
-            onClick={() => setCurrentView('addWalletInfo')}
-            className="w-full bg-green-800 text-white font-semibold py-4 rounded-2xl border-2 border-dashed border-green-600 hover:bg-green-700 transition-colors"
-          >
+//<<<<<<< feat/add-wallet-feature
+          <button onClick={() => setCurrentView('addWalletInfo')} className="w-full bg-green-800 text-white font-semibold py-4 rounded-2xl border-2 border-dashed border-green-600 hover:bg-green-700 transition-colors">
+//=======
+//          <button
+//            onClick={() => setCurrentView('addWalletInfo')}
+//            className="w-full bg-green-800 text-white font-semibold py-4 rounded-2xl border-2 border-dashed border-green-600 hover:bg-green-700 transition-colors"
+//          >
+//>>>>>>> main
             + Ajouter un wallet
           </button>
         </div>
@@ -507,10 +598,18 @@ function App() {
                       headers: {
                         'Content-Type': 'application/json',
                       },
-                      body: JSON.stringify({ name: 'Imported Wallet', walletData }),
+//<<<<<<< feat/add-wallet-feature
+                      body: JSON.stringify({ name: filePath.split(/[\\/]/).pop().replace('.json', ''), walletData }),
                     });
                     if (response.ok) {
                       alert('Wallet imported successfully');
+                      await fetchWallets();
+//=======
+//                      body: JSON.stringify({ name: 'Imported Wallet', walletData }),
+//                    });
+//                    if (response.ok) {
+//                      alert('Wallet imported successfully');
+//>>>>>>> main
                       setCurrentView('wallets');
                     } else {
                       alert('Failed to import wallet');
@@ -612,8 +711,12 @@ function App() {
                 body: JSON.stringify(newWallet),
               });
               if (response.ok) {
-                const createdWallet = await response.json();
-                setWallets([...wallets, createdWallet]);
+//<<<<<<< feat/add-wallet-feature
+                await fetchWallets();
+//=======
+//                const createdWallet = await response.json();
+//                setWallets([...wallets, createdWallet]);
+//>>>>>>> main
                 setCurrentView('wallets');
                 setNewWallet({ name: '', country: '', city: '', idNumber: '', type: 'individual' });
               } else {
