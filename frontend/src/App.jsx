@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star } from 'lucide-react';
-import QRCode from 'qrcode.react';
+import * as QRCode from 'qrcode.react';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
