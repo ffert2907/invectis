@@ -6,6 +6,7 @@ import { mkdir, readdir, readFile, writeFile } from 'fs/promises'
 import { logger } from './config.js'
 import { loadWalletFromFile, createWallet } from './wallet.js'
 import { startNode, appContext } from './core.js'
+import { VECTORS } from './vectors.js'
 import {
   signTransaction,
   createPaymentPayload,
@@ -29,11 +30,12 @@ const __dirname = path.dirname(__filename)
 async function main() {
   logger.prod('Starting in Server Mode...')
 
+  const dataDir = path.join(__dirname, 'data')
+  const walletFile = path.join(dataDir, WALLET_FILE)
+
   try {
     // Setup data directory and wallet path relative to the script file
-    const dataDir = path.join(__dirname, 'data')
     await mkdir(dataDir, { recursive: true })
-    const walletFile = path.join(dataDir, WALLET_FILE)
     const datastorePath = path.join(dataDir, 'helia_server')
 
     // Load wallet (non-interactive)
@@ -152,6 +154,11 @@ async function main() {
         peers: connections.map(c => c.remotePeer.toString())
       })
     })
+
+    // GET /vectors
+    app.get('/vectors', (req, res) => {
+      res.json(VECTORS);
+    });
 
     // GET /messages
     app.get('/messages', (req, res) => {
