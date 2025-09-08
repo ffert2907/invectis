@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star } from 'lucide-react';
 import { QRCodeSVG as QRCode } from 'qrcode.react';
+import countries from './countries';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -640,20 +641,29 @@ function App() {
           onChange={(e) => setNewWallet({ ...newWallet, name: e.target.value })}
           className="bg-gray-800 p-3 rounded-lg"
         />
-        <input
-          type="text"
-          placeholder="Pays de résidence"
+        <select
           value={newWallet.country}
           onChange={(e) => setNewWallet({ ...newWallet, country: e.target.value })}
           className="bg-gray-800 p-3 rounded-lg"
-        />
+        >
+          <option value="">Pays de résidence</option>
+          {countries.map((country) => (
+            <option key={country.code} value={`${country.code} - ${country.name}`}>
+              {country.code} - {country.name}
+            </option>
+          ))}
+        </select>
         <input
           type="text"
-          placeholder="Ville"
+          placeholder="Code Postal"
+          maxLength="25"
           value={newWallet.city}
           onChange={(e) => setNewWallet({ ...newWallet, city: e.target.value })}
           className="bg-gray-800 p-3 rounded-lg"
         />
+        <p className="text-xs text-gray-400 mt-1">
+          Si votre localité ne possède pas de code postal saisissez le nom de la grande ville la plus proche.
+        </p>
         <input
           type="text"
           placeholder="Numéro d'identité nationale"
