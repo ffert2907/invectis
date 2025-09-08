@@ -53,7 +53,7 @@ function App() {
 
   const fetchWallets = async () => {
     try {
-      const response = await fetch('http://localhost:3001/wallets');
+      const response = await fetch('http://localhost:3000/wallets');
       if (response.ok) {
         const fetchedWallets = await response.json();
         setWallets(fetchedWallets);
@@ -69,7 +69,7 @@ function App() {
     fetchWallets();
     const interval = setInterval(async () => {
       try {
-        const response = await fetch('http://localhost:3001/status');
+        const response = await fetch('http://localhost:3000/status');
         if (response.ok) {
           const newStatus = await response.json();
           setStatus(newStatus);
@@ -586,7 +586,7 @@ function App() {
                 const walletData = await window.electronAPI.readFileContent(filePath);
                 if (walletData) {
                   try {
-                    const response = await fetch('http://localhost:3001/wallets/import', {
+                    const response = await fetch('http://localhost:3000/wallets/import', {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
@@ -689,7 +689,7 @@ function App() {
         <button
           onClick={async () => {
             try {
-              const response = await fetch('http://localhost:3001/wallets', {
+              const response = await fetch('http://localhost:3000/wallets', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
