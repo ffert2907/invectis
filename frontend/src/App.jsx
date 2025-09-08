@@ -149,19 +149,18 @@ function App() {
 
         {/* Peer ID and Status */}
         <div className="bg-gray-800/50 rounded-2xl p-4 mb-6 text-white">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-sm text-gray-400">Your Peer ID:</p>
-              <p className="font-mono text-sm break-all">{status.peerId}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-400">Connections:</p>
-              <p className="text-lg font-bold">{status.connections}</p>
-            </div>
+          <div>
+            <p className="text-sm text-gray-400">Your Peer ID:</p>
+            <p className="font-mono text-sm break-all">{status.peerId}</p>
           </div>
-          <div className="flex justify-end space-x-2 mt-2">
-            <button onClick={() => navigator.clipboard.writeText(status.peerId)} className="text-xs bg-gray-700 px-2 py-1 rounded-md">Copy ID</button>
-            <button onClick={() => setShowQrModal(true)} className="text-xs bg-gray-700 px-2 py-1 rounded-md">Show QR</button>
+          <div className="flex justify-between items-center mt-2">
+            <div>
+              <p className="text-lg font-bold">Connections : {status.connections}</p>
+            </div>
+            <div className="flex space-x-2">
+              <button onClick={() => navigator.clipboard.writeText(status.peerId)} className="text-xs bg-gray-700 px-2 py-1 rounded-md">Copy ID</button>
+              <button onClick={() => setShowQrModal(true)} className="text-xs bg-gray-700 px-2 py-1 rounded-md">Show QR</button>
+            </div>
           </div>
         </div>
 
