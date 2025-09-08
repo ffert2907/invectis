@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star } from 'lucide-react';
 import { QRCodeSVG as QRCode } from 'qrcode.react';
 import countries from './countries';
+import Receive from './Receive';
+import SendComponent from './Send';
 
 function App() {
   const [vectors, setVectors] = useState([]);
@@ -19,6 +21,7 @@ function App() {
   const [showVectorDetails, setShowVectorDetails] = useState({});
   const [status, setStatus] = useState({ peerId: '', connections: 0 });
   const [showQrModal, setShowQrModal] = useState(false);
+  const [recipientId, setRecipientId] = useState('');
 
   const [wallets, setWallets] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -226,11 +229,17 @@ function App() {
 
         {/* Boutons Actions */}
         <div className="flex space-x-4">
-          <button className="flex-1 bg-amber-500 text-gray-900 font-semibold py-4 rounded-2xl flex items-center justify-center space-x-2 hover:bg-amber-400 transition-colors">
+          <button
+            onClick={() => setCurrentView('send')}
+            className="flex-1 bg-amber-500 text-gray-900 font-semibold py-4 rounded-2xl flex items-center justify-center space-x-2 hover:bg-amber-400 transition-colors"
+          >
             <Send className="w-5 h-5" />
             <span>Envoyer</span>
           </button>
-          <button className="flex-1 bg-green-700 text-white font-semibold py-4 rounded-2xl flex items-center justify-center space-x-2 hover:bg-green-600 transition-colors">
+          <button
+            onClick={() => setCurrentView('receive')}
+            className="flex-1 bg-green-700 text-white font-semibold py-4 rounded-2xl flex items-center justify-center space-x-2 hover:bg-green-600 transition-colors"
+          >
             <Download className="w-5 h-5" />
             <span>Recevoir</span>
           </button>
@@ -760,6 +769,8 @@ function App() {
       {currentView === 'settings' && renderSettings()}
       {currentView === 'addWalletInfo' && renderAddWalletInfo()}
       {currentView === 'createWalletForm' && renderCreateWalletForm()}
+      {currentView === 'receive' && <Receive status={status} setCurrentView={setCurrentView} vectors={vectors} />}
+      {currentView === 'send' && <SendComponent recipientId={recipientId} setRecipientId={setRecipientId} setCurrentView={setCurrentView} currentView={currentView} />}
     </div>
   );
 };
