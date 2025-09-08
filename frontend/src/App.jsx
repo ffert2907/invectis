@@ -15,7 +15,7 @@ function App() {
     idNumber: '',
     type: 'individual'
   });
-  const [showBalance, setShowBalance] = useState(true);
+  const [showBalance, setShowBalance] = useState(false);
   const [showVectorDetails, setShowVectorDetails] = useState({});
   const [status, setStatus] = useState({ peerId: '', connections: 0 });
   const [showQrModal, setShowQrModal] = useState(false);
