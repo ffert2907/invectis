@@ -4,6 +4,7 @@ import { QRCodeSVG as QRCode } from 'qrcode.react';
 import countries from './countries';
 
 function App() {
+  const [vectors, setVectors] = useState([]);
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedWallet, setSelectedWallet] = useState(0);
   const [principalWalletId, setPrincipalWalletId] = useState(null);
@@ -106,6 +107,23 @@ function App() {
     }
   }, [principalWalletId, wallets]);
 
+  useEffect(() => {
+    const fetchVectors = async () => {
+      try {
+        const response = await fetch('http://localhost:3000/vectors');
+        if (response.ok) {
+          const fetchedVectors = await response.json();
+          setVectors(fetchedVectors);
+        } else {
+          console.error('Failed to fetch vectors');
+        }
+      } catch (error) {
+        console.error('Error fetching vectors:', error);
+      }
+    };
+    fetchVectors();
+  }, []);
+
   const conversionRates = [0.1, 0.07, 0.126, 0.074, 0.063, 0.162, 0.037, 0.108, 0.054];
 
   const toggleVectorDetails = (txId) => {
@@ -189,7 +207,7 @@ function App() {
                   className="w-4 bg-gradient-to-t from-green-600 to-amber-400 rounded-sm mb-1"
                   style={{ height: `${(value / 250) * 40 + 10}px` }}
                 ></div>
-                <span className="text-green-300 text-xs">V{index + 1}</span>
+                <span className="text-green-300 text-xs">{vectors[index]?.[2] ?? `V${index + 1}`}</span>
               </div>
             ))}
           </div>
@@ -197,7 +215,7 @@ function App() {
             <div className="grid grid-cols-3 gap-2 text-xs">
               {wallets[selectedWallet].balance.vectors.slice(0, 9).map((value, index) => (
                 <div key={index} className="text-center">
-                  <p className="text-green-300">V{index + 1}: {value.toFixed(1)}</p>
+                  <p className="text-green-300">{vectors[index]?.[0] ?? `V${index + 1}`}: {value.toFixed(1)}</p>
                   <p className="text-green-400 text-xs">({conversionRates[index]}h)</p>
                 </div>
               ))}
@@ -262,7 +280,7 @@ function App() {
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     {conversionRates.map((rate, index) => (
                       <div key={index} className="text-gray-300">
-                        V{index + 1}: {(Math.abs(tx.amount) * rate).toFixed(2)}
+                        {vectors[index]?.[0] ?? `V${index + 1}`}: {(Math.abs(tx.amount) * rate).toFixed(2)}
                       </div>
                     ))}
                   </div>
