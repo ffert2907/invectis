@@ -2,9 +2,9 @@ import express from 'express'
 import cors from 'cors'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { mkdir } from 'fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'fs/promises'
 import { logger } from './config.js'
-import { loadWalletFromFile } from './wallet.js'
+import { loadWalletFromFile, createWallet } from './wallet.js'
 import { startNode, appContext } from './core.js'
 import {
   signTransaction,
@@ -48,6 +48,96 @@ async function main() {
     app.use(express.json())
 
     // --- API Routes ---
+
+    // GET /wallets
+    app.get('/wallets', async (req, res) => {
+      const dataDir = path.join(__dirname, 'data');
+      try {
+        const files = await readdir(dataDir);
+        const walletFiles = files.filter(file => file.endsWith('.json') || file.endsWith('.dat'));
+        const wallets = [];
+        for (const file of walletFiles) {
+          const filePath = path.join(dataDir, file);
+          const walletData = await readFile(filePath, 'utf8');
+          const wallet = JSON.parse(walletData);
+          wallet.id = file;
+          wallet.name = wallet.name || file.replace(/\.(json|dat)$/, '');
+          wallet.address = wallet.address || `addr_${file.slice(0,12)}...`; // Mock address
+          wallet.balance = {
+            main: Math.random() * 1000,
+            vectors: Array(9).fill(0).map(() => Math.random() * 100)
+          };
+          wallets.push(wallet);
+        }
+        res.json(wallets);
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          // data directory doesn't exist, return empty array
+          return res.json([]);
+        }
+        logger.error(`Failed to get wallets: ${error.message}`);
+        res.status(500).json({ error: 'Failed to get wallets' });
+      }
+    });
+
+    // POST /wallets
+    app.post('/wallets', async (req, res) => {
+      const { name, country, city, idNumber, type } = req.body;
+      const safeName = (name || '').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const walletFileName = `${safeName || 'wallet'}_${Date.now()}.json`;
+      const dataDir = path.join(__dirname, 'data');
+      const filePath = path.join(dataDir, walletFileName);
+
+      try {
+        const walletDetails = {
+          country,
+          city,
+          nationalId: idNumber,
+          accountType: type
+        };
+        const { privateKey, ...walletData } = await createWallet(filePath, walletDetails);
+
+        delete walletData.privateKey;
+
+        const createdWalletForFrontend = {
+          ...walletData,
+          id: walletFileName,
+          name: name,
+          balance: { main: 0, vectors: Array(9).fill(0) },
+          address: `addr...${walletFileName.slice(0, 8)}`
+        };
+
+        res.status(201).json(createdWalletForFrontend);
+      } catch (error) {
+        logger.error(`Failed to create wallet: ${error.message}`);
+        res.status(500).json({ error: 'Failed to create wallet', details: error.message });
+      }
+    });
+
+    // POST /wallets/import
+    app.post('/wallets/import', async (req, res) => {
+      const { name, walletData } = req.body;
+      if (!name || !walletData) {
+        return res.status(400).json({ error: 'Missing name or walletData' });
+      }
+
+      const dataDir = path.join(__dirname, 'data');
+      const safeName = name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
+      const filePath = path.join(dataDir, safeName);
+
+      try {
+        const parsedData = JSON.parse(walletData);
+        if (parsedData.version !== '1.0' || !parsedData.privateKey) {
+            throw new Error('Invalid wallet data format for import.');
+        }
+
+        await writeFile(filePath, JSON.stringify(parsedData, null, 2), 'utf8');
+        res.status(200).json({ message: 'Wallet imported successfully' });
+      } catch (error) {
+        logger.error(`Failed to import wallet: ${error.message}`);
+        res.status(500).json({ error: 'Failed to import wallet', details: error.message });
+      }
+    });
 
     // GET /status
     app.get('/status', (req, res) => {
