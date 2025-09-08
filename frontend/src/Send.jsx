@@ -1,9 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 
 const Send = ({ recipientId, setRecipientId, setCurrentView, currentView }) => {
+  const scannerRef = useRef(null);
+
   useEffect(() => {
-    if (currentView !== 'send') {
+    if (currentView !== 'send' || scannerRef.current) {
       return;
     }
 
@@ -13,8 +15,11 @@ const Send = ({ recipientId, setRecipientId, setCurrentView, currentView }) => {
       false // verbose
     );
 
+    scannerRef.current = scanner;
+
     const onScanSuccess = (decodedText, decodedResult) => {
       setRecipientId(decodedText);
+      // maybe need to delete this next line ?
       scanner.clear();
     };
 
@@ -25,11 +30,25 @@ const Send = ({ recipientId, setRecipientId, setCurrentView, currentView }) => {
     scanner.render(onScanSuccess, onScanFailure);
 
     return () => {
-      scanner.clear().catch(error => {
-        // console.error("Failed to clear scanner.", error);
-      });
+
+      if (scannerRef.current) {
+        scannerRef.current.clear().catch(error => {
+          console.error("Failed to clear scanner.", error);
+        });
+        scannerRef.current = null;
+      }
     };
   }, [currentView]);
+
+  useEffect(() => {
+    if (recipientId && scannerRef.current) {
+        scannerRef.current.clear().catch(error => {
+            console.error("Failed to clear scanner.", error);
+        });
+        scannerRef.current = null;
+    }
+  }, [recipientId]);
+
 
   return (
     <div className="flex flex-col h-full bg-gray-900 p-6">
