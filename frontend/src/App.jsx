@@ -185,12 +185,13 @@ function App() {
         {/* Balance Principal */}
         <div className="text-center mb-6">
           <p className="text-green-200 text-sm mb-1">Solde Principal</p>
-          <h2 className="text-4xl font-bold text-white mb-1">
+          <h2 className="text-4xl font-bold text-white mb-1 flex items-center justify-center">
             {showBalance && wallets[selectedWallet] ? `${wallets[selectedWallet].balance.main.toFixed(2)}` : '••••••'}
+            {vectors[0] && <span className="ml-2">{vectors[0][2]}</span>}
           </h2>
           <p className="text-green-200 text-sm flex items-center justify-center">
             <Clock className="w-4 h-4 mr-1" />
-            IVT-h (heures)
+            {vectors[0] ? `IVT-h (${vectors[0][0]})` : 'IVT-h'}
           </p>
         </div>
 
