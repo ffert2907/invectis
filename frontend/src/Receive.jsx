@@ -23,7 +23,7 @@ const Receive = ({ status, setCurrentView, vectors: vectorData }) => {
   return (
     <div className="flex flex-col h-full bg-gray-900 p-6 overflow-y-auto">
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-3xl shadow-lg text-white">
-        <h1 className="text-2xl font-bold mb-4">Recevoir des fonds</h1>
+        <h1 className="text-2xl font-bold mb-4">Recevoir</h1>
         <p className="text-green-200">Partagez votre QR code ou votre ID de pair. Spécifiez un montant pour l'inclure dans le QR code.</p>
       </div>
 
@@ -37,7 +37,7 @@ const Receive = ({ status, setCurrentView, vectors: vectorData }) => {
                 <span className="px-2 text-lg">{vectorData[0]?.[2] ?? '⏰'}</span>
                 <input
                   type="number"
-                  placeholder={vectorData[0]?.[1] ?? 'Montant en heures'}
+                  placeholder={vectorData[0]?.[1] ?? 'Nombre en heures'}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className="bg-transparent p-2 w-full"
@@ -64,6 +64,10 @@ const Receive = ({ status, setCurrentView, vectors: vectorData }) => {
             const isDataEntered = amount.trim() !== '' || vectorAmounts.some(v => v.trim() !== '');
             navigator.clipboard.writeText(isDataEntered ? qrCodeValue : status.peerId);
           }}
+
+        <p className="font-mono break-all text-center mt-2 text-sm">{status.peerId}</p>
+        <button
+          onClick={() => navigator.clipboard.writeText(qrCodeValue)}
           className="mt-4 bg-amber-500 text-gray-900 font-semibold py-2 px-6 rounded-xl"
         >
           Copier les données du QR

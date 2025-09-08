@@ -14,10 +14,13 @@ const Send = ({ recipientId, setRecipientId, setCurrentView, currentView }) => {
       { fps: 10, qrbox: { width: 250, height: 250 } },
       false // verbose
     );
+
     scannerRef.current = scanner;
 
     const onScanSuccess = (decodedText, decodedResult) => {
       setRecipientId(decodedText);
+      // maybe need to delete this next line ?
+      scanner.clear();
     };
 
     const onScanFailure = (error) => {
@@ -27,6 +30,7 @@ const Send = ({ recipientId, setRecipientId, setCurrentView, currentView }) => {
     scanner.render(onScanSuccess, onScanFailure);
 
     return () => {
+
       if (scannerRef.current) {
         scannerRef.current.clear().catch(error => {
           console.error("Failed to clear scanner.", error);
@@ -44,6 +48,7 @@ const Send = ({ recipientId, setRecipientId, setCurrentView, currentView }) => {
         scannerRef.current = null;
     }
   }, [recipientId]);
+
 
   return (
     <div className="flex flex-col h-full bg-gray-900 p-6">
