@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star } from 'lucide-react';
-import * as QRCode from 'qrcode.react';
+import { QRCodeSVG as QRCode } from 'qrcode.react';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedWallet, setSelectedWallet] = useState(0);
   const [principalWalletId, setPrincipalWalletId] = useState(null);
-  const [walletCreationStep, setWalletCreationStep] = useState(null);
   const [newWallet, setNewWallet] = useState({
     name: '',
     country: '',
@@ -152,7 +151,7 @@ function App() {
           <div className="flex justify-between items-center">
             <div>
               <p className="text-sm text-gray-400">Your Peer ID:</p>
-              <p className="font-mono text-sm truncate">{status.peerId}</p>
+              <p className="font-mono text-sm break-all">{status.peerId}</p>
             </div>
             <div className="text-right">
               <p className="text-sm text-gray-400">Connections:</p>
