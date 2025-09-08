@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "type": "Ed25519",
+  "accountType": "individual",
+  "country": "FR",
+  "city": "Paris",
+  "nationalIdHash": "5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5",
+  "privateKey": "CAESQFiEaG0vKoiC2H74obtt3qnr+MRaTAClyGmBE8ceQqOKjn+pYdDDhYSFh7SXUgr3QVwI80Vb2bxh/ahSB6YHzO4=",
+  "created": "2025-09-08T09:44:29.022Z"
+}
