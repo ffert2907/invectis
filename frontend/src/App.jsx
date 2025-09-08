@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star } from 'lucide-react';
+import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star, List } from 'lucide-react';
 import { QRCodeSVG as QRCode } from 'qrcode.react';
 import countries from './countries';
 import Receive from './Receive';
 import SendComponent from './Send';
+import BottomNav from './BottomNav';
 
 function App() {
   const [vectors, setVectors] = useState([]);
@@ -246,94 +247,26 @@ function App() {
         </div>
       </div>
 
-      {/* Transactions */}
-      <div className="flex-1 p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-white font-semibold text-lg">Dernières Transactions</h3>
-          <button className="text-amber-400 text-sm font-medium">Voir tout</button>
+          </button>
         </div>
 
-        <div className="space-y-3">
-          {transactions.map((tx) => (
-            <div key={tx.id} className="bg-gray-800 rounded-2xl p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className={`p-2 rounded-full ${tx.type === 'received' ? 'bg-green-600' : 'bg-red-600'}`}>
-                    {tx.type === 'received' ?
-                      <ArrowDownLeft className="w-4 h-4 text-white" /> :
-                      <ArrowUpRight className="w-4 h-4 text-white" />
-                    }
-                  </div>
-                  <div>
-                    <p className="text-white font-medium">{tx.description}</p>
-                    <p className="text-gray-400 text-sm">{tx.address}</p>
-                    <p className="text-gray-500 text-xs">Réf: {tx.reference}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className={`font-semibold ${tx.type === 'received' ? 'text-green-400' : 'text-red-400'}`}>
-                    {tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(2)} IVT-h
-                  </p>
-                  <p className="text-gray-400 text-sm">{tx.timestamp}</p>
-                  <button
-                    onClick={() => toggleVectorDetails(tx.id)}
-                    className="text-amber-400 text-xs mt-1 hover:text-amber-300"
-                  >
-                    Détails vecteurs
-                  </button>
-                </div>
-              </div>
-
-              {showVectorDetails[tx.id] && (
-                <div className="mt-4 pt-4 border-t border-gray-700">
-                  <p className="text-gray-400 text-sm mb-2">Répartition vectorielle:</p>
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    {conversionRates.map((rate, index) => (
-                      <div key={index} className="text-gray-300">
-                        {vectors[index + 1]?.[2]} {vectors[index + 1]?.[0] ?? `V${index + 2}`}: {(Math.abs(tx.amount) * rate).toFixed(2)}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+        {wallets[selectedWallet]?.type === 'entreprise' && (
+          <div className="mt-4">
+            <button
+              onClick={() => alert('Créer une note clicked')}
+              className="w-full bg-blue-600 text-white font-semibold py-4 rounded-2xl hover:bg-blue-500 transition-colors"
+            >
+              Créer une note
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Navigation Bottom */}
-      <div className="bg-gray-800 px-6 py-4 rounded-t-3xl">
-        <div className="flex justify-around">
-          <button
-            onClick={() => setCurrentView('dashboard')}
-            className={`flex flex-col items-center space-y-1 ${currentView === 'dashboard' ? 'text-amber-400' : 'text-gray-400'}`}
-          >
-            <Wallet className="w-6 h-6" />
-            <span className="text-xs">Accueil</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('wallets')}
-            className={`flex flex-col items-center space-y-1 ${currentView === 'wallets' ? 'text-amber-400' : 'text-gray-400'}`}
-          >
-            <Circle className="w-6 h-6" />
-            <span className="text-xs">Wallets</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('account')}
-            className={`flex flex-col items-center space-y-1 ${currentView === 'account' ? 'text-amber-400' : 'text-gray-400'}`}
-          >
-            <User className="w-6 h-6" />
-            <span className="text-xs">Compte</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('settings')}
-            className={`flex flex-col items-center space-y-1 ${currentView === 'settings' ? 'text-amber-400' : 'text-gray-400'}`}
-          >
-            <Settings className="w-6 h-6" />
-            <span className="text-xs">Paramètres</span>
-          </button>
-        </div>
-      </div>
+      {/* spacer */}
+      <div className="flex-1 p-6"></div>
+
+
+      <BottomNav currentView={currentView} setCurrentView={setCurrentView} />
     </div>
   );
 
@@ -380,35 +313,7 @@ function App() {
         </div>
       </div>
 
-      <div className="bg-gray-800 px-6 py-4 rounded-t-3xl">
-        <div className="flex justify-around">
-          <button
-            onClick={() => setCurrentView('dashboard')}
-            className="flex flex-col items-center space-y-1 text-gray-400"
-          >
-            <Wallet className="w-6 h-6" />
-            <span className="text-xs">Accueil</span>
-          </button>
-          <button className="flex flex-col items-center space-y-1 text-amber-400">
-            <Circle className="w-6 h-6" />
-            <span className="text-xs">Wallets</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('account')}
-            className="flex flex-col items-center space-y-1 text-gray-400"
-          >
-            <User className="w-6 h-6" />
-            <span className="text-xs">Compte</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('settings')}
-            className="flex flex-col items-center space-y-1 text-gray-400"
-          >
-            <Settings className="w-6 h-6" />
-            <span className="text-xs">Paramètres</span>
-          </button>
-        </div>
-      </div>
+      <BottomNav currentView={currentView} setCurrentView={setCurrentView} />
     </div>
   );
 
@@ -454,35 +359,7 @@ function App() {
         </div>
       </div>
 
-      <div className="bg-gray-800 px-6 py-4 rounded-t-3xl">
-        <div className="flex justify-around">
-          <button
-            onClick={() => setCurrentView('dashboard')}
-            className="flex flex-col items-center space-y-1 text-gray-400"
-          >
-            <Wallet className="w-6 h-6" />
-            <span className="text-xs">Accueil</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('wallets')}
-            className="flex flex-col items-center space-y-1 text-gray-400"
-          >
-            <Circle className="w-6 h-6" />
-            <span className="text-xs">Wallets</span>
-          </button>
-          <button className="flex flex-col items-center space-y-1 text-amber-400">
-            <User className="w-6 h-6" />
-            <span className="text-xs">Compte</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('settings')}
-            className="flex flex-col items-center space-y-1 text-gray-400"
-          >
-            <Settings className="w-6 h-6" />
-            <span className="text-xs">Paramètres</span>
-          </button>
-        </div>
-      </div>
+      <BottomNav currentView={currentView} setCurrentView={setCurrentView} />
     </div>
   );
 
@@ -554,35 +431,67 @@ function App() {
         </div>
       </div>
 
-      <div className="bg-gray-800 px-6 py-4 rounded-t-3xl">
-        <div className="flex justify-around">
-          <button
-            onClick={() => setCurrentView('dashboard')}
-            className="flex flex-col items-center space-y-1 text-gray-400"
-          >
-            <Wallet className="w-6 h-6" />
-            <span className="text-xs">Accueil</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('wallets')}
-            className="flex flex-col items-center space-y-1 text-gray-400"
-          >
-            <Circle className="w-6 h-6" />
-            <span className="text-xs">Wallets</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('account')}
-            className="flex flex-col items-center space-y-1 text-gray-400"
-          >
-            <User className="w-6 h-6" />
-            <span className="text-xs">Compte</span>
-          </button>
-          <button className="flex flex-col items-center space-y-1 text-amber-400">
-            <Settings className="w-6 h-6" />
-            <span className="text-xs">Paramètres</span>
-          </button>
+      <BottomNav currentView={currentView} setCurrentView={setCurrentView} />
+    </div>
+  );
+
+  const renderTransactions = () => (
+    <div className="flex flex-col h-full bg-gray-900">
+      <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl">
+        <h1 className="text-2xl font-bold text-white mb-2">Transactions</h1>
+        <p className="text-green-200 text-sm">Historique de vos transactions</p>
+      </div>
+
+      <div className="flex-1 p-6 overflow-y-auto">
+        <div className="space-y-3">
+          {transactions.map((tx) => (
+            <div key={tx.id} className="bg-gray-800 rounded-2xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className={`p-2 rounded-full ${tx.type === 'received' ? 'bg-green-600' : 'bg-red-600'}`}>
+                    {tx.type === 'received' ?
+                      <ArrowDownLeft className="w-4 h-4 text-white" /> :
+                      <ArrowUpRight className="w-4 h-4 text-white" />
+                    }
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">{tx.description}</p>
+                    <p className="text-gray-400 text-sm">{tx.address}</p>
+                    <p className="text-gray-500 text-xs">Réf: {tx.reference}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className={`font-semibold ${tx.type === 'received' ? 'text-green-400' : 'text-red-400'}`}>
+                    {tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(2)} IVT-h
+                  </p>
+                  <p className="text-gray-400 text-sm">{tx.timestamp}</p>
+                  <button
+                    onClick={() => toggleVectorDetails(tx.id)}
+                    className="text-amber-400 text-xs mt-1 hover:text-amber-300"
+                  >
+                    Détails vecteurs
+                  </button>
+                </div>
+              </div>
+
+              {showVectorDetails[tx.id] && (
+                <div className="mt-4 pt-4 border-t border-gray-700">
+                  <p className="text-gray-400 text-sm mb-2">Répartition vectorielle:</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {conversionRates.map((rate, index) => (
+                      <div key={index} className="text-gray-300">
+                        {vectors[index + 1]?.[2]} {vectors[index + 1]?.[0] ?? `V${index + 2}`}: {(Math.abs(tx.amount) * rate).toFixed(2)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
+
+      <BottomNav currentView={currentView} setCurrentView={setCurrentView} />
     </div>
   );
 
@@ -767,6 +676,7 @@ function App() {
       {currentView === 'wallets' && renderWallets()}
       {currentView === 'account' && renderAccount()}
       {currentView === 'settings' && renderSettings()}
+      {currentView === 'transactions' && renderTransactions()}
       {currentView === 'addWalletInfo' && renderAddWalletInfo()}
       {currentView === 'createWalletForm' && renderCreateWalletForm()}
       {currentView === 'receive' && <Receive status={status} setCurrentView={setCurrentView} vectors={vectors} />}
