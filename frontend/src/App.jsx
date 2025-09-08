@@ -190,6 +190,7 @@ function App() {
             {vectors[0] && <span className="ml-2">{vectors[0][2]}</span>}
           </h2>
           <p className="text-green-200 text-sm flex items-center justify-center">
+            <Clock className="w-4 h-4 mr-1" />
             {vectors[0] ? `IVT-h (${vectors[0][0]})` : 'IVT-h'}
           </p>
         </div>
