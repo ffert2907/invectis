@@ -207,7 +207,7 @@ function App() {
                   className="w-4 bg-gradient-to-t from-green-600 to-amber-400 rounded-sm mb-1"
                   style={{ height: `${(value / 250) * 40 + 10}px` }}
                 ></div>
-                <span className="text-green-300 text-xs">{vectors[index]?.[2] ?? `V${index + 1}`}</span>
+                <span className="text-green-300 text-xs">{vectors[index + 1]?.[2] ?? `V${index + 2}`}</span>
               </div>
             ))}
           </div>
@@ -215,7 +215,7 @@ function App() {
             <div className="grid grid-cols-3 gap-2 text-xs">
               {wallets[selectedWallet].balance.vectors.slice(0, 9).map((value, index) => (
                 <div key={index} className="text-center">
-                  <p className="text-green-300">{vectors[index]?.[2]} {vectors[index]?.[0] ?? `V${index + 1}`}: {value.toFixed(1)}</p>
+                  <p className="text-green-300">{vectors[index + 1]?.[2]} {vectors[index + 1]?.[0] ?? `V${index + 2}`}: {value.toFixed(1)}</p>
                   <p className="text-green-400 text-xs">({conversionRates[index]}h)</p>
                 </div>
               ))}
@@ -280,7 +280,7 @@ function App() {
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     {conversionRates.map((rate, index) => (
                       <div key={index} className="text-gray-300">
-                        {vectors[index]?.[2]} {vectors[index]?.[0] ?? `V${index + 1}`}: {(Math.abs(tx.amount) * rate).toFixed(2)}
+                        {vectors[index + 1]?.[2]} {vectors[index + 1]?.[0] ?? `V${index + 2}`}: {(Math.abs(tx.amount) * rate).toFixed(2)}
                       </div>
                     ))}
                   </div>
