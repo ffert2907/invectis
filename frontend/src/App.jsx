@@ -4,6 +4,7 @@ import { QRCodeSVG as QRCode } from 'qrcode.react';
 import countries from './countries';
 
 function App() {
+  const [vectors, setVectors] = useState([]);
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedWallet, setSelectedWallet] = useState(0);
   const [principalWalletId, setPrincipalWalletId] = useState(null);
@@ -14,7 +15,7 @@ function App() {
     idNumber: '',
     type: 'individual'
   });
-  const [showBalance, setShowBalance] = useState(true);
+  const [showBalance, setShowBalance] = useState(false);
   const [showVectorDetails, setShowVectorDetails] = useState({});
   const [status, setStatus] = useState({ peerId: '', connections: 0 });
   const [showQrModal, setShowQrModal] = useState(false);
@@ -106,6 +107,23 @@ function App() {
     }
   }, [principalWalletId, wallets]);
 
+  useEffect(() => {
+    const fetchVectors = async () => {
+      try {
+        const response = await fetch('http://localhost:3000/vectors');
+        if (response.ok) {
+          const fetchedVectors = await response.json();
+          setVectors(fetchedVectors);
+        } else {
+          console.error('Failed to fetch vectors');
+        }
+      } catch (error) {
+        console.error('Error fetching vectors:', error);
+      }
+    };
+    fetchVectors();
+  }, []);
+
   const conversionRates = [0.1, 0.07, 0.126, 0.074, 0.063, 0.162, 0.037, 0.108, 0.054];
 
   const toggleVectorDetails = (txId) => {
@@ -167,12 +185,12 @@ function App() {
         {/* Balance Principal */}
         <div className="text-center mb-6">
           <p className="text-green-200 text-sm mb-1">Solde Principal</p>
-          <h2 className="text-4xl font-bold text-white mb-1">
+          <h2 className="text-4xl font-bold text-white mb-1 flex items-center justify-center">
             {showBalance && wallets[selectedWallet] ? `${wallets[selectedWallet].balance.main.toFixed(2)}` : '••••••'}
+            {vectors[0] && <span className="ml-2">{vectors[0][2]}</span>}
           </h2>
           <p className="text-green-200 text-sm flex items-center justify-center">
-            <Clock className="w-4 h-4 mr-1" />
-            IVT-h (heures)
+            {vectors[0] ? `IVT-h (${vectors[0][0]})` : 'IVT-h'}
           </p>
         </div>
 
@@ -189,7 +207,7 @@ function App() {
                   className="w-4 bg-gradient-to-t from-green-600 to-amber-400 rounded-sm mb-1"
                   style={{ height: `${(value / 250) * 40 + 10}px` }}
                 ></div>
-                <span className="text-green-300 text-xs">V{index + 1}</span>
+                <span className="text-green-300 text-xs">{vectors[index + 1]?.[2] ?? `V${index + 2}`}</span>
               </div>
             ))}
           </div>
@@ -197,7 +215,7 @@ function App() {
             <div className="grid grid-cols-3 gap-2 text-xs">
               {wallets[selectedWallet].balance.vectors.slice(0, 9).map((value, index) => (
                 <div key={index} className="text-center">
-                  <p className="text-green-300">V{index + 1}: {value.toFixed(1)}</p>
+                  <p className="text-green-300">{vectors[index + 1]?.[2]} {vectors[index + 1]?.[0] ?? `V${index + 2}`}: {value.toFixed(1)}</p>
                   <p className="text-green-400 text-xs">({conversionRates[index]}h)</p>
                 </div>
               ))}
@@ -262,7 +280,7 @@ function App() {
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     {conversionRates.map((rate, index) => (
                       <div key={index} className="text-gray-300">
-                        V{index + 1}: {(Math.abs(tx.amount) * rate).toFixed(2)}
+                        {vectors[index + 1]?.[2]} {vectors[index + 1]?.[0] ?? `V${index + 2}`}: {(Math.abs(tx.amount) * rate).toFixed(2)}
                       </div>
                     ))}
                   </div>
