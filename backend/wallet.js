@@ -134,8 +134,12 @@ export async function createWallet(filePath, {
   await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8');
   logger.info(`✅ New wallet created and saved (Account Type: ${accountType})`);
 
+  // Remove the base64 private key from the wallet data that will be returned
+  // to avoid overwriting the privateKey object in the final returned object.
+  delete walletData.privateKey;
+
   return {
-    privateKey,
-    ...walletData
+    privateKey, // The actual crypto key object
+    ...walletData // The rest of the wallet metadata
   };
 }
