@@ -1,45 +1,33 @@
-import dotenv from 'dotenv'
+import { createLogger, format, transports } from 'winston';
 
-// Charge les variables d'environnement du fichier .env
-dotenv.config()
+const { combine, timestamp, printf, colorize, errors, splat } = format;
 
-const config = {
-  appMode: process.env.APP_MODE || 'production', // 'production' ou 'debug'
-  logs: process.env.LOGS === 'on', // true si 'on', sinon false
-  logMode: process.env.LOG_MODE || 'simple' // 'simple' ou 'verbose'
-}
+// Custom log format
+const logFormat = printf(({ level, message, timestamp, stack }) => {
+  return `${timestamp} ${level}: ${stack || message}`;
+});
 
-// Création d'un logger simple
-const logger = {
-  prod: (...args) => {
-    if (config.logs) {
-      // Ajoute une couleur pour distinguer les logs de prod
-      console.log('\x1b[32m✅ PROD:\x1b[0m', ...args)
-    }
-  },
-  info: (...args) => {
-    if (config.logs && config.appMode === 'debug') {
-      console.log(...args)
-    }
-  },
-  debug: (...args) => {
-    if (config.logs && config.appMode === 'debug' && config.logMode === 'verbose') {
-      // Ajoute une couleur pour distinguer les logs de debug
-      console.log('\x1b[34m🔍 DEBUG:\x1b[0m', ...args)
-    }
-  },
-  error: (...args) => {
-    if (config.logs) {
-      // Ajoute une couleur pour distinguer les erreurs
-      console.error('\x1b[31m❌ ERREUR:\x1b[0m', ...args)
-    }
-  },
-  warn: (...args) => {
-    if (config.logs) {
-      // Ajoute une couleur pour distinguer les avertissements
-      console.warn('\x1b[33m⚠️ ALERTE:\x1b[0m', ...args)
-    }
-  }
-}
+// Logger configuration
+export const logger = createLogger({
+  level: process.env.LOG_LEVEL || 'info', // Default to 'info'
+  format: combine(
+    colorize(),
+    timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    errors({ stack: true }), // Log stack traces
+    splat(),
+    logFormat
+  ),
+  transports: [new transports.Console()],
+});
 
-export { config, logger }
+// Add a 'prod' level for messages that should always be shown
+logger.add(new transports.Console({
+  level: 'prod',
+  format: format.printf(info => info.message)
+}));
+
+// The secret pepper for HMAC operations.
+// WARNING: In a production environment, this should be loaded from a secure
+// source like a hardware security module (HSM) or a secret management service.
+// It should NOT be hardcoded.
+export const PEPPER = 'a-very-secret-pepper-that-is-not-so-secret';

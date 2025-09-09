@@ -13,10 +13,12 @@ function App() {
   const [principalWalletId, setPrincipalWalletId] = useState(null);
   const [newWallet, setNewWallet] = useState({
     name: '',
-    country: '',
-    city: '',
-    idNumber: '',
-    type: 'individual'
+    givenName: '',
+    familyName: '',
+    dateOfBirth: '',
+    countryOfBirth: '',
+    cityOfBirth: '',
+    accountType: 'individual'
   });
   const [showBalance, setShowBalance] = useState(false);
   const [showVectorDetails, setShowVectorDetails] = useState({});
@@ -573,44 +575,14 @@ function App() {
           onChange={(e) => setNewWallet({ ...newWallet, name: e.target.value })}
           className="bg-gray-800 p-3 rounded-lg"
         />
-        <select
-          value={newWallet.country}
-          onChange={(e) => setNewWallet({ ...newWallet, country: e.target.value })}
-          className="bg-gray-800 p-3 rounded-lg"
-        >
-          <option value="">Pays de résidence</option>
-          {countries.map((country) => (
-            <option key={country.code} value={`${country.code} - ${country.name}`}>
-              {country.code} - {country.name}
-            </option>
-          ))}
-        </select>
-        <input
-          type="text"
-          placeholder="Code Postal"
-          maxLength="25"
-          value={newWallet.city}
-          onChange={(e) => setNewWallet({ ...newWallet, city: e.target.value })}
-          className="bg-gray-800 p-3 rounded-lg"
-        />
-        <p className="text-xs text-gray-400 mt-1">
-          Si votre localité ne possède pas de code postal saisissez le nom de la grande ville la plus proche.
-        </p>
-        <input
-          type="text"
-          placeholder="Numéro d'identité nationale"
-          value={newWallet.idNumber}
-          onChange={(e) => setNewWallet({ ...newWallet, idNumber: e.target.value })}
-          className="bg-gray-800 p-3 rounded-lg"
-        />
         <div className="flex justify-around">
           <label className="flex items-center">
             <input
               type="radio"
               name="walletType"
               value="individual"
-              checked={newWallet.type === 'individual'}
-              onChange={(e) => setNewWallet({ ...newWallet, type: e.target.value })}
+              checked={newWallet.accountType === 'individual'}
+              onChange={(e) => setNewWallet({ ...newWallet, accountType: e.target.value })}
               className="mr-2"
             />
             Individual
@@ -620,13 +592,59 @@ function App() {
               type="radio"
               name="walletType"
               value="entreprise"
-              checked={newWallet.type === 'entreprise'}
-              onChange={(e) => setNewWallet({ ...newWallet, type: e.target.value })}
+              checked={newWallet.accountType === 'entreprise'}
+              onChange={(e) => setNewWallet({ ...newWallet, accountType: e.target.value })}
               className="mr-2"
             />
             Entreprise
           </label>
         </div>
+
+        {newWallet.accountType === 'individual' && (
+          <>
+            <input
+              type="text"
+              placeholder="Prénom"
+              value={newWallet.givenName}
+              onChange={(e) => setNewWallet({ ...newWallet, givenName: e.target.value })}
+              className="bg-gray-800 p-3 rounded-lg"
+            />
+            <input
+              type="text"
+              placeholder="Nom de famille"
+              value={newWallet.familyName}
+              onChange={(e) => setNewWallet({ ...newWallet, familyName: e.target.value })}
+              className="bg-gray-800 p-3 rounded-lg"
+            />
+            <input
+              type="date"
+              placeholder="Date de naissance"
+              value={newWallet.dateOfBirth}
+              onChange={(e) => setNewWallet({ ...newWallet, dateOfBirth: e.target.value })}
+              className="bg-gray-800 p-3 rounded-lg"
+            />
+            <select
+              value={newWallet.countryOfBirth}
+              onChange={(e) => setNewWallet({ ...newWallet, countryOfBirth: e.target.value })}
+              className="bg-gray-800 p-3 rounded-lg"
+            >
+              <option value="">Pays de naissance</option>
+              {countries.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.name}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              placeholder="Ville de naissance"
+              value={newWallet.cityOfBirth}
+              onChange={(e) => setNewWallet({ ...newWallet, cityOfBirth: e.target.value })}
+              className="bg-gray-800 p-3 rounded-lg"
+            />
+          </>
+        )}
+
         <button
           onClick={async () => {
             try {
@@ -640,9 +658,10 @@ function App() {
               if (response.ok) {
                 await fetchWallets();
                 setCurrentView('wallets');
-                setNewWallet({ name: '', country: '', city: '', idNumber: '', type: 'individual' });
+                setNewWallet({ name: '', givenName: '', familyName: '', dateOfBirth: '', countryOfBirth: '', cityOfBirth: '', accountType: 'individual' });
               } else {
-                alert('Failed to create wallet');
+                const errorData = await response.json();
+                alert(`Failed to create wallet: ${errorData.details || response.statusText}`);
               }
             } catch (error) {
               console.error('Error creating wallet:', error);

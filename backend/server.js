@@ -17,9 +17,12 @@ import {
   createAccountValidationPayload,
   createPollQuestionPayload,
   createPollAnswerPayload,
-  createInformationPayload
+  createInformationPayload,
+  createRegisterPayload
 } from './transaction.js'
-import { peerIdFromString } from '@libp2p/peer-id'
+import { peerIdFromString, peerIdFromKeys } from '@libp2p/peer-id'
+import { keys } from '@libp2p/crypto'
+import { TextEncoder } from 'util'
 
 const PORT = process.env.PORT || 3000
 const WALLET_FILE = process.argv[2] || 'wallet.dat'
@@ -84,7 +87,16 @@ async function main() {
 
     // POST /wallets
     app.post('/wallets', async (req, res) => {
-      const { name, country, city, idNumber, type } = req.body;
+      const {
+        name,
+        accountType,
+        givenName,
+        familyName,
+        dateOfBirth,
+        countryOfBirth,
+        cityOfBirth
+      } = req.body;
+
       const safeName = (name || '').replace(/[^a-z0-9]/gi, '_').toLowerCase();
       const walletFileName = `${safeName || 'wallet'}_${Date.now()}.json`;
       const dataDir = path.join(__dirname, 'data');
@@ -92,27 +104,68 @@ async function main() {
 
       try {
         const walletDetails = {
-          country,
-          city,
-          nationalId: idNumber,
-          accountType: type
+          accountType,
+          givenName,
+          familyName,
+          dateOfBirth,
+          countryOfBirth,
+          cityOfBirth
         };
-        const { privateKey, ...walletData } = await createWallet(filePath, walletDetails);
+        const {
+          privateKey,
+          ...walletData
+        } = await createWallet(filePath, walletDetails);
 
-        delete walletData.privateKey;
+        // If it's an individual wallet, automatically create and publish a registration transaction
+        if (walletData.accountType === 'individual' && walletData.nullifier) {
+          logger.info(`Individual wallet created, proceeding with registration transaction for nullifier: ${walletData.nullifier}`);
 
+          // We need a peerId and a sign function for the new wallet to sign the transaction
+          const peerId = await peerIdFromKeys(privateKey.public.bytes, privateKey.bytes);
+          const tempWallet = {
+            peerId,
+            privateKey,
+            sign: (data) => privateKey.sign(data),
+            accountType: walletData.accountType
+          };
+
+          const registerPayload = createRegisterPayload(tempWallet, walletData.nullifier);
+
+          const transactionToSign = {
+            parents: appContext.dagHeads.map(cid => cid.toString()),
+            author: tempWallet.peerId.toString(),
+            timestamp: Date.now(),
+            type: 'REGISTER',
+            payload: registerPayload
+          };
+
+          const signedTransaction = await signTransaction(transactionToSign, tempWallet.sign);
+          const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
+          await appContext.node.libp2p.services.pubsub.publish('/invectis/global-ledger/1.0', messageBytes);
+
+          logger.prod(`✅ Published REGISTRATION transaction for ${tempWallet.peerId.toString()}`);
+        }
+
+        // Prepare response for the frontend
         const createdWalletForFrontend = {
           ...walletData,
           id: walletFileName,
           name: name,
-          balance: { main: 0, vectors: Array(9).fill(0) },
+          balance: {
+            main: 0,
+            vectors: Array(9).fill(0)
+          },
           address: `addr...${walletFileName.slice(0, 8)}`
         };
+        delete createdWalletForFrontend.privateKey; // Ensure private key is not sent to frontend
 
         res.status(201).json(createdWalletForFrontend);
       } catch (error) {
         logger.error(`Failed to create wallet: ${error.message}`);
-        res.status(500).json({ error: 'Failed to create wallet', details: error.message });
+        res.status(500).json({
+          error: 'Failed to create wallet',
+          details: error.message
+        });
       }
     });
 
