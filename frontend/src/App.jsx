@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star, List } from 'lucide-react';
+import { Wallet, Send, Download, Settings, User, Factory, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star, List } from 'lucide-react';
 import { QRCodeSVG as QRCode } from 'qrcode.react';
 import countries from './countries';
 import Receive from './Receive';
@@ -190,7 +190,11 @@ function App() {
 
         {/* Balance Principal */}
         <div className="text-center mb-6">
-          <p className="text-green-200 text-sm mb-1">Solde Principal</p>
+          <div className="flex items-center justify-center text-green-200 text-sm mb-1">
+            {wallets[selectedWallet]?.type === 'individual' && <User className="w-4 h-4 mr-2" />}
+            {wallets[selectedWallet]?.type === 'entreprise' && <Factory className="w-4 h-4 mr-2" />}
+            <span>Solde Principal</span>
+          </div>
           <h2 className="text-4xl font-bold text-white mb-1 flex items-center justify-center">
             {showBalance && wallets[selectedWallet] ? `${wallets[selectedWallet].balance.main.toFixed(2)}` : '••••••'}
             {vectors[0] && <span className="ml-2">{vectors[0][2]}</span>}
