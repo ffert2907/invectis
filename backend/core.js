@@ -15,6 +15,7 @@ export const appContext = {
   j: null,
   dagHeads: [],
   receivedMessages: [],
+  nullifiers: new Set(), // A set to store registered nullifiers
 }
 
 /**
@@ -56,9 +57,25 @@ export async function startNode(wallet, datastorePath) {
       logger.debug('Core: Message decoded:', message)
 
       const authorPeerId = peerIdFromString(message.author)
-      const isValid = await verifyTransaction(message, authorPeerId)
+      let isValid = await verifyTransaction(message, authorPeerId)
+
+      // Additional validation for REGISTER transactions
+      if (isValid && message.type === 'REGISTER') {
+        const { nullifier } = message.payload;
+        if (appContext.nullifiers.has(nullifier)) {
+          logger.warn(`Core: Duplicate nullifier found: ${nullifier}. Rejecting transaction.`);
+          isValid = false; // Mark as invalid
+        }
+      }
 
       if (isValid) {
+        // If it's a valid REGISTER transaction, add the nullifier to the set
+        if (message.type === 'REGISTER') {
+          const { nullifier } = message.payload;
+          appContext.nullifiers.add(nullifier);
+          logger.info(`Core: New nullifier registered: ${nullifier}`);
+        }
+
         const cid = await appContext.j.add(message)
         logger.prod(`Core: Valid transaction received and stored. CID: ${cid.toString()}`)
 
@@ -78,7 +95,7 @@ export async function startNode(wallet, datastorePath) {
         logger.info(`✅ Transaction processed (type: ${message.type}) from ${message.author}`)
 
       } else {
-        logger.warn('Core: Received invalid transaction!')
+        logger.warn(`Core: Received invalid transaction! Type: ${message.type}, Author: ${message.author}`)
       }
     } catch (error) {
       logger.error('Core: Error processing message:', error)

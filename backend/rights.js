@@ -1,4 +1,11 @@
 export const ACCOUNT_RIGHTS = {
+  individual: [
+    'REGISTER',
+    'VECTOR_TRANSACTION',
+    'SETDAILYBONUS',
+    'GETRATERATIO',
+    'ASK_VALIDATION_ACCOUNT'
+  ],
   standard: [
     'VECTOR_TRANSACTION',
     'SETDAILYBONUS',
