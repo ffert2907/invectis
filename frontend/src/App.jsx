@@ -247,9 +247,6 @@ function App() {
         </div>
       </div>
 
-          </button>
-        </div>
-
         {wallets[selectedWallet]?.type === 'entreprise' && (
           <div className="mt-4">
             <button
@@ -260,7 +257,6 @@ function App() {
             </button>
           </div>
         )}
-      </div>
 
       {/* spacer */}
       <div className="flex-1 p-6"></div>

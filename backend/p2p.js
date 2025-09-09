@@ -6,7 +6,7 @@ import { yamux } from '@chainsafe/libp2p-yamux'
 import { identify } from '@libp2p/identify'
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { createHelia } from 'helia'
-import { LevelDatastore } from 'datastore-level'
+import { MemoryDatastore } from 'datastore-core'
 import path from 'path'
 
 /**
@@ -17,8 +17,7 @@ import path from 'path'
  */
 export async function createNode(privateKey, datastorePath) {
   // Configure la base de données locale pour le stockage
-  const datastore = new LevelDatastore(datastorePath)
-  await datastore.open()
+  const datastore = new MemoryDatastore()
 
   console.log('🔍 DEBUG: Configuration du nœud libp2p...')
   
