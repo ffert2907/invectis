@@ -52,6 +52,21 @@ export function createPaymentPayload(wallet, recipientPeerId, description, refer
   }
 }
 
+
+/**
+ * Creates a transaction to register a nullifier on the ledger.
+ * @param {object} wallet - The wallet of the individual.
+ * @param {string} nullifier - The nullifier generated from PII.
+ * @returns {Object} - Transaction non signée
+ */
+export function createRegisterPayload(wallet, nullifier) {
+  hasRight(wallet.accountType, 'REGISTER');
+  return {
+    nullifier: nullifier,
+    wallet: wallet.peerId.toString()
+  };
+}
+
 /**
  * Crée une transaction pour demander la validation d'un compte
  * @param {object} wallet - Le portefeuille de l'expéditeur
