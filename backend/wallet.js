@@ -112,8 +112,13 @@ export async function createWallet(filePath, {
   }
 
   const libp2pCrypto = await import('@libp2p/crypto');
-  const privateKey = await libp2pCrypto.keys.generateKeyPair('Ed25519');
-  const marshalledKey = libp2pCrypto.keys.privateKeyToProtobuf(privateKey);
+  // Generate a key
+  const generatedKey = await libp2pCrypto.keys.generateKeyPair('Ed25519');
+  // Marshall it to its protobuf format
+  const marshalledKey = libp2pCrypto.keys.privateKeyToProtobuf(generatedKey);
+  // Unmarshall it back to a key object. This "round-trip" ensures the key object
+  // has the exact same structure as a key loaded from a file.
+  const privateKey = await libp2pCrypto.keys.privateKeyFromProtobuf(marshalledKey);
 
   const walletData = {
     version: '1.0',
