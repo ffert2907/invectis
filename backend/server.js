@@ -20,8 +20,8 @@ import {
   createInformationPayload,
   createRegisterPayload
 } from './transaction.js'
-import { peerIdFromString, peerIdFromKeys } from '@libp2p/peer-id'
-import { keys } from '@libp2p/crypto'
+import { peerIdFromString } from '@libp2p/peer-id'
+import { peerIdFromKeys } from '@libp2p/peer-id-factory'
 import { TextEncoder } from 'util'
 
 const PORT = process.env.PORT || 3000
