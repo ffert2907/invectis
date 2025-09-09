@@ -58,16 +58,12 @@ const Receive = ({ status, setCurrentView, vectors: vectorData }) => {
           ))}
         </div>
 
-        <p className="font-mono break-all text-center mt-2 text-xs">{status.peerId}</p>
+        <p className="font-mono break-all text-center mt-2 text-sm">{status.peerId}</p>
         <button
           onClick={() => {
             const isDataEntered = amount.trim() !== '' || vectorAmounts.some(v => v.trim() !== '');
             navigator.clipboard.writeText(isDataEntered ? qrCodeValue : status.peerId);
           }}
-
-        <p className="font-mono break-all text-center mt-2 text-sm">{status.peerId}</p>
-        <button
-          onClick={() => navigator.clipboard.writeText(qrCodeValue)}
           className="mt-4 bg-amber-500 text-gray-900 font-semibold py-2 px-6 rounded-xl"
         >
           Copier les données du QR

@@ -39,10 +39,10 @@ async function main() {
     const datastorePath = path.join(dataDir, 'helia_server')
 
     // Load wallet (non-interactive)
-    const wallet = await loadWalletFromFile(walletFile)
+    // const wallet = await loadWalletFromFile(walletFile)
 
     // Start the core P2P node
-    await startNode(wallet, datastorePath)
+    // await startNode(wallet, datastorePath)
 
     // Setup Express server
     const app = express()
