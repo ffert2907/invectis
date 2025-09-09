@@ -1,4 +1,5 @@
 import { createLibp2p } from 'libp2p'
+import { peerIdFromPrivateKey } from '@libp2p/peer-id'
 import { tcp } from '@libp2p/tcp'
 import { webSockets } from '@libp2p/websockets'
 import { noise } from '@chainsafe/libp2p-noise'
@@ -20,10 +21,11 @@ export async function createNode(privateKey, datastorePath) {
   const datastore = new MemoryDatastore()
 
   console.log('🔍 DEBUG: Configuration du nœud libp2p...')
+  const peerId = await peerIdFromPrivateKey(privateKey)
   
   // Configuration de libp2p avec WebSockets
   const libp2pConfig = {
-    privateKey,
+    peerId,
     addresses: {
       listen: [
         '/ip4/0.0.0.0/tcp/0',
