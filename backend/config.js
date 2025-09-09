@@ -2,6 +2,22 @@ import { createLogger, format, transports } from 'winston';
 
 const { combine, timestamp, printf, colorize, errors, splat } = format;
 
+// Define custom levels to include 'prod'
+const customLevels = {
+  levels: {
+    error: 0,
+    warn: 1,
+    info: 2,
+    prod: 3,
+    verbose: 4,
+    debug: 5,
+    silly: 6
+  },
+  colors: {
+    prod: 'green'
+  }
+};
+
 // Custom log format
 const logFormat = printf(({ level, message, timestamp, stack }) => {
   return `${timestamp} ${level}: ${stack || message}`;
@@ -9,9 +25,10 @@ const logFormat = printf(({ level, message, timestamp, stack }) => {
 
 // Logger configuration
 export const logger = createLogger({
-  level: process.env.LOG_LEVEL || 'info', // Default to 'info'
+  levels: customLevels.levels,
+  level: process.env.LOG_LEVEL || 'silly', // Log all levels by default
   format: combine(
-    colorize(),
+    colorize({ all: true }),
     timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
     errors({ stack: true }), // Log stack traces
     splat(),
@@ -20,11 +37,9 @@ export const logger = createLogger({
   transports: [new transports.Console()],
 });
 
-// Add a 'prod' level for messages that should always be shown
-logger.add(new transports.Console({
-  level: 'prod',
-  format: format.printf(info => info.message)
-}));
+// Add colors for the custom levels
+format.colorize().addColors(customLevels.colors);
+
 
 // The secret pepper for HMAC operations.
 // WARNING: In a production environment, this should be loaded from a secure
