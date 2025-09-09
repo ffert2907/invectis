@@ -191,8 +191,8 @@ function App() {
         {/* Balance Principal */}
         <div className="text-center mb-6">
           <div className="flex items-center justify-center text-green-200 text-sm mb-1">
-            {wallets[selectedWallet]?.type === 'individual' && <User className="w-4 h-4 mr-2" />}
-            {wallets[selectedWallet]?.type === 'entreprise' && <Factory className="w-4 h-4 mr-2" />}
+            {wallets[selectedWallet]?.accountType === 'individual' && <User className="w-4 h-4 mr-2" />}
+            {wallets[selectedWallet]?.accountType === 'entreprise' && <Factory className="w-4 h-4 mr-2" />}
             <span>Solde Principal</span>
           </div>
           <h2 className="text-4xl font-bold text-white mb-1 flex items-center justify-center">
@@ -253,7 +253,7 @@ function App() {
         </div>
       </div>
 
-        {wallets[selectedWallet]?.type === 'entreprise' && (
+        {wallets[selectedWallet]?.accountType === 'entreprise' && (
           <div className="mt-4">
             <button
               onClick={() => alert('Créer une note clicked')}
