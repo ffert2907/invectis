@@ -1,2 +1,3 @@
-node server.js wallet1.dat
+LOG_LEVEL=info node server.js wallet1.dat
 pause
+
