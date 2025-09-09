@@ -20,8 +20,7 @@ import {
   createInformationPayload,
   createRegisterPayload
 } from './transaction.js'
-import { peerIdFromString } from '@libp2p/peer-id'
-import { peerIdFromKeys } from '@libp2p/peer-id-factory'
+import { peerIdFromString, peerIdFromPrivateKey } from '@libp2p/peer-id'
 import { TextEncoder } from 'util'
 
 const PORT = process.env.PORT || 3000
@@ -121,7 +120,7 @@ async function main() {
           logger.info(`Individual wallet created, proceeding with registration transaction for nullifier: ${walletData.nullifier}`);
 
           // We need a peerId and a sign function for the new wallet to sign the transaction
-          const peerId = await peerIdFromKeys(privateKey.public.bytes, privateKey.bytes);
+          const peerId = await peerIdFromPrivateKey(privateKey);
           const tempWallet = {
             peerId,
             privateKey,
