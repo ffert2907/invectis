@@ -36,21 +36,49 @@ export async function loadWalletFromFile(filePath) {
 }
 
 /**
- * Initializes or loads a wallet. This function is simplified to only load a wallet,
- * as interactive creation is handled by the frontend and server API.
+ * Initializes or loads a wallet, with interactive creation as a fallback.
  * @param {string} filePath - Path to the wallet file.
- * @returns {Promise<object>} - Wallet data.
+ * @param {import('readline').Interface} rl - The readline interface for user input.
+ * @returns {Promise<object>} - Wallet data, including the private key.
  */
-export async function initializeWallet(filePath) {
+export async function initializeWallet(filePath, rl) {
   try {
     return await loadWalletFromFile(filePath);
   } catch (error) {
-    if (error.code === 'ENOENT') {
-      logger.error(`Wallet file not found at ${filePath}. Please create a wallet via the API.`);
-      throw new Error(`Wallet file not found: ${filePath}`);
+    if (error.code !== 'ENOENT') {
+      logger.error('An unexpected error occurred while loading the wallet:', error);
+      throw error;
     }
-    logger.error('An unexpected error occurred while loading the wallet:', error);
-    throw error;
+
+    logger.info('No valid wallet found. Starting interactive creation...');
+    const askQuestion = (query) => new Promise(resolve => rl.question(query, resolve));
+
+    const accountType = await (async () => {
+      let choice;
+      do {
+        choice = await askQuestion('Choose account type (1: Individual, 2: Enterprise): ');
+      } while (choice !== '1' && choice !== '2');
+      return choice === '1' ? 'individual' : 'enterprise';
+    })();
+
+    let walletDetails = { accountType };
+
+    if (accountType === 'individual') {
+      logger.info('\nPlease provide your personal information for your individual wallet:');
+      const givenName = await askQuestion('  - First Name: ');
+      const familyName = await askQuestion('  - Last Name: ');
+      const dateOfBirth = await askQuestion('  - Date of Birth (YYYY-MM-DD): ');
+      const countryOfBirth = await askQuestion('  - 2-letter Country Code of Birth (e.g., FR): ');
+      const cityOfBirth = await askQuestion('  - City of Birth: ');
+      walletDetails = { ...walletDetails, givenName, familyName, dateOfBirth, countryOfBirth, cityOfBirth };
+    } else {
+        logger.info('\nPlease provide details for your enterprise wallet:');
+        const country = await askQuestion('  - Country of Operation: ');
+        const city = await askQuestion('  - City of Operation: ');
+        walletDetails = { ...walletDetails, countryOfBirth: country, cityOfBirth: city };
+    }
+
+    return createWallet(filePath, walletDetails);
   }
 }
 
