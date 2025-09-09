@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Send, Download, Settings, User, Factory, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star, List, Building } from 'lucide-react';
-import { QRCodeSVG as QRCode } from code.react';
+import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star, List, Building, Factory } from 'lucide-react';
+import { QRCodeSVG as QRCode } from 'qrcode.react';
+//import { QRCodeSVG as QRCode } from code.react';
 import countries from './countries';
 import Receive from './Receive';
 import SendComponent from './Send';
@@ -209,7 +210,7 @@ function App() {
             {vectors[0] && <span className="ml-2">{vectors[0][2]}</span>}
           </h2>
           <p className="text-green-200 text-sm flex items-center justify-center">
-            {wallets[selectedWallet] && <AccountIcon type={wallets[selectedWallet].type} className="w-4 h-4 mr-1" />}
+            {wallets[selectedWallet] && <AccountIcon type={wallets[selectedWallet].accountType} className="w-4 h-4 mr-1" />}
             <Clock className="w-4 h-4 mr-1" />
             {vectors[0] ? `IVT-h (${vectors[0][0]})` : 'IVT-h'}
           </p>
@@ -303,7 +304,7 @@ function App() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <div className="w-12 h-12 bg-gradient-to-br from-green-600 to-green-800 rounded-xl flex items-center justify-center">
-                    <AccountIcon type={wallet.type} className="w-6 h-6 text-white" />
+                    <AccountIcon type={wallet.accountType} className="w-6 h-6 text-white" />
                   </div>
                   <div>
                     <h3 className="text-white font-semibold">{wallet.name}</h3>
