@@ -123,6 +123,7 @@ async function main() {
 
                   // Proceed with payment
                   const balance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+
                   logger.info(`Your current account balance is: ${balance}`);
                   if (balance <= 0) {
                     logger.warn('You have no funds to send.');
