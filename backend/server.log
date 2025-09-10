@@ -1,1 +1,13 @@
-[dotenv@17.2.2] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+2025-09-10 15:14:41 [32mprod[39m: [32mStarting in Server Mode...[39m
+2025-09-10 15:14:41 [34mdebug[39m: [34mAttempting to load wallet from:[39m
+2025-09-10 15:14:41 [32minfo[39m: [32m✅ Existing wallet loaded (Account Type: individual)[39m
+2025-09-10 15:14:41 [32minfo[39m: [32mCore: Initializing P2P node...[39m
+2025-09-10 15:14:41 [32minfo[39m: [32mCore: Identity:[39m
+2025-09-10 15:14:41 [32mprod[39m: [32mCore: Node started successfully[39m
+2025-09-10 15:14:41 [32mprod[39m: [32mCore: Subscribed to topic: /invectis/global-ledger/1.0[39m
+2025-09-10 15:14:41 [32mprod[39m: [32m🚀 Server is running at http://localhost:3000[39m
+2025-09-10 15:14:41 [32mprod[39m: [32m✅ Wallet loaded: /app/backend/data/test-wallet.dat[39m
+2025-09-10 15:14:44 [34mdebug[39m: [34mAttempting to load wallet from:[39m
+2025-09-10 15:14:44 [32minfo[39m: [32m✅ Existing wallet loaded (Account Type: individual)[39m
+2025-09-10 15:14:44 [34mdebug[39m: [34mAttempting to load wallet from:[39m
+2025-09-10 15:14:44 [32minfo[39m: [32m✅ Existing wallet loaded (Account Type: standard)[39m

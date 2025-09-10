@@ -188,32 +188,33 @@ export function createSetRateRatioPayload(wallet, newRates, description, referen
  * @returns {Object} - Transaction non signée
  */
 export function createSetDailyBonusPayload(wallet, walletBalance, dailyTransactionSum, description, reference) {
-  hasRight(wallet.accountType, 'SETDAILYBONUS')
-  let bonus = 0
+  hasRight(wallet.accountType, 'SETDAILYBONUS');
+  let bonus = 0;
+
   if (walletBalance < 8) {
     if (dailyTransactionSum !== 0) {
-      bonus = 8 - walletBalance
+      bonus = 8 - Math.min(8, Math.max(0, -dailyTransactionSum));
     } else {
-      bonus = 0
+      bonus = 8 - walletBalance;
     }
-  } else {
-    if (dailyTransactionSum < 0) {
-      bonus = Math.min(8, -1 * dailyTransactionSum)
+  } else { // walletBalance >= 8
+    if (dailyTransactionSum < 8) {
+      bonus = Math.max(0, Math.min(8, -dailyTransactionSum));
     } else {
-      bonus = 0
+      bonus = 0;
     }
   }
 
-  // On ne crée une transaction que si le bonus est positif
+  // We only create a transaction if the bonus is positive
   if (bonus <= 0) {
-    return null
+    return null;
   }
 
   return {
     description: description || '',
     reference: reference || '',
     bonus: bonus
-  }
+  };
 }
 
 /**
