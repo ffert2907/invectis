@@ -22,6 +22,7 @@ import {
 } from './transaction.js'
 import { peerIdFromString, peerIdFromPrivateKey } from '@libp2p/peer-id'
 import { TextEncoder } from 'util'
+import { calculateBalance } from './ledger.js'
 
 const PORT = process.env.PORT || 3000
 const WALLET_FILE = process.argv[2] || 'wallet.dat'
@@ -61,22 +62,32 @@ async function main() {
         const walletFiles = files.filter(file => file.endsWith('.json') || file.endsWith('.dat'));
         const wallets = [];
         for (const file of walletFiles) {
-          const filePath = path.join(dataDir, file);
-          const walletData = await readFile(filePath, 'utf8');
-          const wallet = JSON.parse(walletData);
-          wallet.id = file;
-          wallet.name = wallet.name || file.replace(/\.(json|dat)$/, '');
-          wallet.address = wallet.address || `addr_${file.slice(0,12)}...`; // Mock address
-          wallet.balance = {
-            main: Math.random() * 1000,
-            vectors: Array(9).fill(0).map(() => Math.random() * 100)
-          };
-          wallets.push(wallet);
+          try {
+            const filePath = path.join(dataDir, file);
+            const loadedWallet = await loadWalletFromFile(filePath);
+            const balance = await calculateBalance(loadedWallet.peerId.toString(), appContext.dagHeads, appContext.j);
+
+            const walletInfo = {
+              id: file,
+              name: file.replace(/\.(json|dat)$/, ''),
+              address: loadedWallet.peerId.toString(),
+              balance: {
+                main: balance,
+                vectors: Array(9).fill(0)
+              },
+              accountType: loadedWallet.accountType,
+              country: loadedWallet.country,
+              city: loadedWallet.city,
+            };
+            wallets.push(walletInfo);
+          } catch (loadError) {
+            logger.error(`Could not load or process wallet ${file}: ${loadError.message}`);
+            // Optionally skip this wallet or add an error state
+          }
         }
         res.json(wallets);
       } catch (error) {
         if (error.code === 'ENOENT') {
-          // data directory doesn't exist, return empty array
           return res.json([]);
         }
         logger.error(`Failed to get wallets: ${error.message}`);
