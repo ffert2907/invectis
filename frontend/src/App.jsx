@@ -158,9 +158,9 @@ function App() {
       {showQrModal && (
         <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center">
           <div className="bg-white p-8 rounded-lg text-center">
-            <h2 className="text-lg font-bold mb-4">Scan QR Code to Connect</h2>
+            <h2 className="text-lg font-bold mb-4">{t('scanQrCodeToConnect')}</h2>
             <QRCode value={status.peerId} size={256} />
-            <button onClick={() => setShowQrModal(false)} className="mt-4 bg-gray-800 text-white px-4 py-2 rounded-md">Close</button>
+            <button onClick={() => setShowQrModal(false)} className="mt-4 bg-gray-800 text-white px-4 py-2 rounded-md">{t('close')}</button>
           </div>
         </div>
       )}
@@ -185,16 +185,16 @@ function App() {
         {/* Peer ID and Status */}
         <div className="bg-gray-800/50 rounded-2xl p-4 mb-6 text-white">
           <div>
-            <p className="text-sm text-gray-400">Your Peer ID:</p>
+            <p className="text-sm text-gray-400">{t('yourPeerId')}</p>
             <p className="font-mono text-sm break-all">{status.peerId}</p>
           </div>
           <div className="flex justify-between items-center mt-2">
             <div>
-              <p className="text-lg font-bold">Connections : {status.connections}</p>
+              <p className="text-lg font-bold">{t('connections', { count: status.connections })}</p>
             </div>
             <div className="flex space-x-2">
-              <button onClick={() => navigator.clipboard.writeText(status.peerId)} className="text-xs bg-gray-700 px-2 py-1 rounded-md">Copy ID</button>
-              <button onClick={() => setShowQrModal(true)} className="text-xs bg-gray-700 px-2 py-1 rounded-md">Show QR</button>
+              <button onClick={() => navigator.clipboard.writeText(status.peerId)} className="text-xs bg-gray-700 px-2 py-1 rounded-md">{t('copyId')}</button>
+              <button onClick={() => setShowQrModal(true)} className="text-xs bg-gray-700 px-2 py-1 rounded-md">{t('showQr')}</button>
             </div>
           </div>
         </div>
@@ -271,7 +271,7 @@ function App() {
               onClick={() => alert('Créer une note clicked')}
               className="w-full bg-blue-600 text-white font-semibold py-4 rounded-2xl hover:bg-blue-500 transition-colors"
             >
-              Créer une note
+              {t('createNote')}
             </button>
           </div>
         )}
@@ -288,7 +288,7 @@ function App() {
     <div className="flex flex-col h-full bg-gray-900">
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl">
         <h1 className="text-2xl font-bold text-white mb-2">{t('wallets')}</h1>
-        <p className="text-green-200 text-sm">Gérez vos portefeuilles crypto</p>
+        <p className="text-green-200 text-sm">{t('manageYourWallets')}</p>
       </div>
 
       <div className="flex-1 p-6">
@@ -335,7 +335,7 @@ function App() {
     <div className="flex flex-col h-full bg-gray-900">
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl">
         <h1 className="text-2xl font-bold text-white mb-2">{t('account')}</h1>
-        <p className="text-green-200 text-sm">Informations personnelles</p>
+        <p className="text-green-200 text-sm">{t('personalInformation')}</p>
       </div>
 
       <div className="flex-1 p-6">
@@ -343,30 +343,30 @@ function App() {
           <div className="w-20 h-20 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full mx-auto mb-4 flex items-center justify-center">
             <User className="w-10 h-10 text-gray-900" />
           </div>
-          <h2 className="text-white text-xl font-semibold">Utilisateur Invectis</h2>
-          <p className="text-gray-400">Membre depuis 2024</p>
+          <h2 className="text-white text-xl font-semibold">{t('invectisUser')}</h2>
+          <p className="text-gray-400">{t('memberSince')}</p>
         </div>
 
         <div className="space-y-4">
           <div className="bg-gray-800 rounded-2xl p-4">
-            <h3 className="text-white font-medium mb-2">Portfolio Total</h3>
+            <h3 className="text-white font-medium mb-2">{t('totalPortfolio')}</h3>
             <p className="text-2xl font-bold text-amber-400">{(wallets.reduce((sum, w) => sum + w.balance.main, 0)).toFixed(2)} IVT-h</p>
           </div>
 
           <div className="bg-gray-800 rounded-2xl p-4">
-            <h3 className="text-white font-medium mb-3">Statistiques</h3>
+            <h3 className="text-white font-medium mb-3">{t('statistics')}</h3>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-gray-400">Wallets connectés</span>
+                <span className="text-gray-400">{t('connectedWallets')}</span>
                 <span className="text-white">{wallets.length}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Transactions ce mois</span>
+                <span className="text-gray-400">{t('transactionsThisMonth')}</span>
                 <span className="text-white">47</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Dernière connexion</span>
-                <span className="text-white">Maintenant</span>
+                <span className="text-gray-400">{t('lastConnection')}</span>
+                <span className="text-white">{t('now')}</span>
               </div>
             </div>
           </div>
@@ -381,63 +381,63 @@ function App() {
     <div className="flex flex-col h-full bg-gray-900">
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl">
         <h1 className="text-2xl font-bold text-white mb-2">{t('settings')}</h1>
-        <p className="text-green-200 text-sm">Configuration de l'application</p>
+        <p className="text-green-200 text-sm">{t('appConfiguration')}</p>
       </div>
 
       <div className="flex-1 p-6">
         <div className="space-y-6">
           <div>
-            <h3 className="text-white font-semibold mb-3">Réseau</h3>
+            <h3 className="text-white font-semibold mb-3">{t('network')}</h3>
             <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-gray-300">Serveur principal</span>
-                <span className="text-green-400 text-sm">En ligne</span>
+                <span className="text-gray-300">{t('mainServer')}</span>
+                <span className="text-green-400 text-sm">{t('online')}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-300">Nodes connectés</span>
+                <span className="text-gray-300">{t('connectedNodes')}</span>
                 <span className="text-white">12</span>
               </div>
               <button className="w-full bg-green-700 text-white py-3 rounded-xl">
-                Gérer les nodes
+                {t('manageNodes')}
               </button>
             </div>
           </div>
 
           <div>
-            <h3 className="text-white font-semibold mb-3">Préférences</h3>
+            <h3 className="text-white font-semibold mb-3">{t('preferences')}</h3>
             <div className="bg-gray-800 rounded-2xl p-4 space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-gray-300">Mode sombre</span>
+                <span className="text-gray-300">{t('darkMode')}</span>
                 <div className="w-12 h-6 bg-amber-500 rounded-full relative">
                   <div className="w-5 h-5 bg-white rounded-full absolute top-0.5 right-0.5"></div>
                 </div>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-300">Notifications</span>
+                <span className="text-gray-300">{t('notifications')}</span>
                 <div className="w-12 h-6 bg-green-600 rounded-full relative">
                   <div className="w-5 h-5 bg-white rounded-full absolute top-0.5 right-0.5"></div>
                 </div>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-300">Unité d'affichage</span>
+                <span className="text-gray-300">{t('displayUnit')}</span>
                 <span className="text-amber-400">IVT-h</span>
               </div>
             </div>
           </div>
 
           <div>
-            <h3 className="text-white font-semibold mb-3">Sécurité</h3>
+            <h3 className="text-white font-semibold mb-3">{t('security')}</h3>
             <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
               <button className="w-full text-left text-gray-300 py-2">
-                Changer le code PIN
+                {t('changePin')}
                 <ChevronRight className="w-4 h-4 float-right mt-0.5" />
               </button>
               <button className="w-full text-left text-gray-300 py-2">
-                Sauvegarde de récupération
+                {t('recoveryBackup')}
                 <ChevronRight className="w-4 h-4 float-right mt-0.5" />
               </button>
               <button className="w-full text-left text-gray-300 py-2">
-                Authentification biométrique
+                {t('biometricAuthentication')}
                 <ChevronRight className="w-4 h-4 float-right mt-0.5" />
               </button>
             </div>
@@ -453,7 +453,7 @@ function App() {
     <div className="flex flex-col h-full bg-gray-900">
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl">
         <h1 className="text-2xl font-bold text-white mb-2">{t('transactions')}</h1>
-        <p className="text-green-200 text-sm">Historique de vos transactions</p>
+        <p className="text-green-200 text-sm">{t('transactionHistory')}</p>
       </div>
 
       <div className="flex-1 p-6 overflow-y-auto">
@@ -483,14 +483,14 @@ function App() {
                     onClick={() => toggleVectorDetails(tx.id)}
                     className="text-amber-400 text-xs mt-1 hover:text-amber-300"
                   >
-                    Détails vecteurs
+                    {t('vectorDetails')}
                   </button>
                 </div>
               </div>
 
               {showVectorDetails[tx.id] && (
                 <div className="mt-4 pt-4 border-t border-gray-700">
-                  <p className="text-gray-400 text-sm mb-2">Répartition vectorielle:</p>
+                  <p className="text-gray-400 text-sm mb-2">{t('vectorialRepartition')}</p>
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     {conversionRates.map((rate, index) => (
                       <div key={index} className="text-gray-300">
@@ -512,12 +512,12 @@ function App() {
   const renderAddWalletInfo = () => (
     <div className="flex flex-col h-full bg-gray-900 p-6">
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-3xl shadow-lg text-white">
-        <h1 className="text-2xl font-bold mb-4">Ajouter un Wallet</h1>
+        <h1 className="text-2xl font-bold mb-4">{t('addNewWallet')}</h1>
         <p className="text-green-200 mb-6">
-          Vous allez ajouter un nouveau wallet. Vous pouvez en un wallet individuel si vous n'en avez pas encore (un seul par personne) ou plusieurs wallets entreprises. Vous pouvez ajouter le wallet d'une autre personne en co-gestion ; dans ce cas le propriétaire doit vous donner les droits sur son wallet et peut les retirer à tout moment.
+          {t('addNewWalletDescription')}
         </p>
         <p className="text-green-200 font-semibold">
-          Choisissez Nouveau Wallet ou Wallet Existant.
+          {t('chooseNewOrExistingWallet')}
         </p>
       </div>
 
@@ -526,7 +526,7 @@ function App() {
           onClick={() => setCurrentView('createWalletForm')}
           className="bg-amber-500 text-gray-900 font-semibold py-4 rounded-2xl"
         >
-          Créer un nouveau Wallet
+          {t('createNewWallet')}
         </button>
         <button
           onClick={async () => {
@@ -562,7 +562,7 @@ function App() {
           }}
           className="bg-green-700 text-white font-semibold py-4 rounded-2xl"
         >
-          Importer un Wallet déjà existant
+          {t('importExistingWallet')}
         </button>
       </div>
 
@@ -571,7 +571,7 @@ function App() {
           onClick={() => setCurrentView('wallets')}
           className="text-gray-400"
         >
-          Annuler
+          {t('cancel')}
         </button>
       </div>
     </div>
@@ -580,13 +580,13 @@ function App() {
   const renderCreateWalletForm = () => (
     <div className="flex flex-col h-full bg-gray-900 p-6">
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-3xl shadow-lg text-white">
-        <h1 className="text-2xl font-bold mb-4">Créer un nouveau Wallet</h1>
+        <h1 className="text-2xl font-bold mb-4">{t('createNewWallet')}</h1>
       </div>
 
       <div className="flex-1 flex flex-col justify-center space-y-4 text-white">
         <input
           type="text"
-          placeholder="Nom du Wallet"
+          placeholder={t('walletName')}
           value={newWallet.name}
           onChange={(e) => setNewWallet({ ...newWallet, name: e.target.value })}
           className="bg-gray-800 p-3 rounded-lg"
@@ -601,7 +601,7 @@ function App() {
               onChange={(e) => setNewWallet({ ...newWallet, accountType: e.target.value })}
               className="mr-2"
             />
-            Individual
+            {t('individual')}
           </label>
           <label className="flex items-center">
             <input
@@ -612,7 +612,7 @@ function App() {
               onChange={(e) => setNewWallet({ ...newWallet, accountType: e.target.value })}
               className="mr-2"
             />
-            Entreprise
+            {t('entreprise')}
           </label>
         </div>
 
@@ -620,21 +620,21 @@ function App() {
           <>
             <input
               type="text"
-              placeholder="Prénom"
+              placeholder={t('firstName')}
               value={newWallet.givenName}
               onChange={(e) => setNewWallet({ ...newWallet, givenName: e.target.value })}
               className="bg-gray-800 p-3 rounded-lg"
             />
             <input
               type="text"
-              placeholder="Nom de famille"
+              placeholder={t('lastName')}
               value={newWallet.familyName}
               onChange={(e) => setNewWallet({ ...newWallet, familyName: e.target.value })}
               className="bg-gray-800 p-3 rounded-lg"
             />
             <input
               type="date"
-              placeholder="Date de naissance"
+              placeholder={t('dateOfBirth')}
               value={newWallet.dateOfBirth}
               onChange={(e) => setNewWallet({ ...newWallet, dateOfBirth: e.target.value })}
               className="bg-gray-800 p-3 rounded-lg"
@@ -644,7 +644,7 @@ function App() {
               onChange={(e) => setNewWallet({ ...newWallet, countryOfBirth: e.target.value })}
               className="bg-gray-800 p-3 rounded-lg"
             >
-              <option value="">Pays de naissance</option>
+              <option value="">{t('countryOfBirth')}</option>
               {countries.map((country) => (
                 <option key={country.code} value={country.code}>
                   {country.name}
@@ -653,7 +653,7 @@ function App() {
             </select>
             <input
               type="text"
-              placeholder="Ville de naissance"
+              placeholder={t('cityOfBirth')}
               value={newWallet.cityOfBirth}
               onChange={(e) => setNewWallet({ ...newWallet, cityOfBirth: e.target.value })}
               className="bg-gray-800 p-3 rounded-lg"
@@ -686,7 +686,7 @@ function App() {
           }}
           className="bg-amber-500 text-gray-900 font-semibold py-4 rounded-2xl"
         >
-          Créer
+          {t('create')}
         </button>
       </div>
 
@@ -695,7 +695,7 @@ function App() {
           onClick={() => setCurrentView('addWalletInfo')}
           className="text-gray-400"
         >
-          Retour
+          {t('return')}
         </button>
       </div>
     </div>
