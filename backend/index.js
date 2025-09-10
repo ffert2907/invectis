@@ -21,8 +21,8 @@ import { logger } from './config.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { mkdir } from 'fs/promises'
-import { startNode, appContext } from './core.js'
-import { calculateBalance, getNonce, calculateDailyTransactionSum, hasReceivedBonusToday } from './ledger.js'
+import { startNode, appContext, applyAutomaticBonus } from './core.js'
+import { calculateBalance, getNonce, calculateDailyTransactionSum } from './ledger.js'
 
 const peerAddress = process.argv[3]
 const customDataDir = process.argv[4]
@@ -118,37 +118,8 @@ async function main() {
                   type = 'PAYMENT';
                   logger.info('--- Create a new Payment ---');
 
-                  // Automatic Daily Bonus Check
-                  const alreadyReceivedBonus = await hasReceivedBonusToday(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
-                  if (!alreadyReceivedBonus) {
-                    logger.info('User has not received a daily bonus today. Calculating now...');
-                    const bonusWalletBalance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
-                    const bonusDailyTransactionSum = await calculateDailyTransactionSum(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
-                    const bonusPayload = createSetDailyBonusPayload(appContext.wallet, bonusWalletBalance, bonusDailyTransactionSum, 'Automatic Daily Bonus', 'ref-auto-bonus-001');
-
-                    if (bonusPayload && bonusPayload.bonus > 0) {
-                      logger.info(`✅ Awarding an automatic daily bonus of ${bonusPayload.bonus}.`);
-                      const bonusTransactionToSign = {
-                        parents: appContext.dagHeads.map(cid => cid.toString()),
-                        author: appContext.wallet.peerId.toString(),
-                        timestamp: Date.now(),
-                        type: 'SETDAILYBONUS',
-                        payload: bonusPayload
-                      };
-                      const signedBonusTransaction = await signTransaction(bonusTransactionToSign, appContext.wallet.sign);
-                      const bonusCid = await appContext.j.add(signedBonusTransaction);
-                      const parentStrings = signedBonusTransaction.parents || [];
-                      const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()));
-                      appContext.dagHeads = [...remainingHeads, bonusCid]; // Update DAG heads
-                      const bonusMessageBytes = new TextEncoder().encode(JSON.stringify(signedBonusTransaction));
-                      await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, bonusMessageBytes);
-                      logger.info('✅ Bonus transaction published to the network!');
-                    } else {
-                      logger.info('No automatic daily bonus to add at this time.');
-                    }
-                  } else {
-                    logger.info('User has already received a daily bonus today.');
-                  }
+                  // Apply automatic bonus if eligible
+                  await applyAutomaticBonus();
 
                   // Proceed with payment
                   const balance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
