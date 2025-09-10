@@ -64,7 +64,10 @@ async function main() {
         for (const file of walletFiles) {
           try {
             const filePath = path.join(dataDir, file);
-            const loadedWallet = await loadWalletFromFile(filePath);
+            // load wallet in quiet mode (not log any loading action to not pollute the logs)
+            const loadedWallet = await loadWalletFromFile(filePath, { quiet: true });
+//            const loadedWallet = await loadWalletFromFile(filePath);  // keep this line in case of...
+
             const balance = await calculateBalance(loadedWallet.peerId.toString(), appContext.dagHeads, appContext.j);
 
             const walletInfo = {
@@ -316,9 +319,20 @@ async function main() {
 
     // Start server
     const server = app.listen(PORT, () => {
-      logger.prod(`🚀 Server is running at http://localhost:${PORT}`)
-      logger.prod(`✅ Wallet loaded: ${walletFile}`)
-    })
+      logger.prod(`🚀 Server is running at http://localhost:${PORT}`);
+      logger.prod(`✅ Wallet loaded: ${walletFile}`);
+
+      // Find and log the recommended address for local connections
+      const allAddresses = appContext.node.libp2p.getMultiaddrs().map(a => a.toString());
+      const localWsAddress = allAddresses.find(a => a.includes('/ip4/127.0.0.1/') && a.includes('/ws'));
+
+      if (localWsAddress) {
+        logger.prod('------------------------------------------------------------------');
+        logger.prod('To connect a local client, use this address:');
+        logger.prod(localWsAddress);
+        logger.prod('------------------------------------------------------------------');
+      }
+    });
 
     // Graceful shutdown
     process.on('SIGINT', async () => {
