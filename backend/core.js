@@ -40,7 +40,7 @@ export async function startNode(wallet, datastorePath) {
   // The peerId is already in the wallet object from wallet.js
   appContext.wallet.sign = (data) => wallet.privateKey.sign(data)
 
-  logger.info('Core: Identity:', appContext.wallet.peerId.toString())
+  logger.info(`Core: Identity: ${appContext.wallet.peerId.toString()}`)
 
   // 3. Start the node
   await node.start()
