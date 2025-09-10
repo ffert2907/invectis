@@ -1,5 +1,6 @@
 import { createNode } from './p2p.js'
 import { verifyTransaction } from './transaction.js'
+import { calculateBalance, getNonce } from './ledger.js'
 import { formatTransactionForFrontend } from './api.js'
 import { peerIdFromString } from '@libp2p/peer-id'
 import { json } from '@helia/json'
@@ -65,6 +66,29 @@ export async function startNode(wallet, datastorePath) {
         if (appContext.nullifiers.has(nullifier)) {
           logger.warn(`Core: Duplicate nullifier found: ${nullifier}. Rejecting transaction.`);
           isValid = false; // Mark as invalid
+        }
+      }
+
+      // Additional validation for PAYMENT and VECTOR_TRANSACTION
+      if (isValid && (message.type === 'PAYMENT' || message.type === 'VECTOR_TRANSACTION')) {
+        const authorId = message.author;
+        const payload = message.payload;
+        const amountToSpend = message.type === 'PAYMENT' ? payload.amount : payload.totalTime;
+
+        // 1. Check balance
+        const balance = await calculateBalance(authorId, appContext.dagHeads, appContext.j);
+        if (balance < amountToSpend) {
+          logger.warn(`Core: Insufficient funds for ${authorId}. Balance: ${balance}, required: ${amountToSpend}. Rejecting transaction.`);
+          isValid = false;
+        }
+
+        // 2. Check nonce for double-spend prevention
+        if (isValid) {
+          const expectedNonce = await getNonce(authorId, appContext.dagHeads, appContext.j);
+          if (payload.nonce !== expectedNonce) {
+            logger.warn(`Core: Invalid nonce for ${authorId}. Expected: ${expectedNonce}, got: ${payload.nonce}. Rejecting transaction.`);
+            isValid = false;
+          }
         }
       }
 

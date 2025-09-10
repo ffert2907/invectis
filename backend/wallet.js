@@ -112,34 +112,35 @@ export async function createWallet(filePath, {
   }
 
   const libp2pCrypto = await import('@libp2p/crypto');
-  // Generate a key
-  const generatedKey = await libp2pCrypto.keys.generateKeyPair('Ed25519');
-  // Marshall it to its protobuf format
-  const marshalledKey = libp2pCrypto.keys.privateKeyToProtobuf(generatedKey);
-  // Unmarshall it back to a key object. This "round-trip" ensures the key object
-  // has the exact same structure as a key loaded from a file.
-  const privateKey = await libp2pCrypto.keys.privateKeyFromProtobuf(marshalledKey);
+  // Generate the key pair. This is the canonical private key object we should use.
+  const privateKey = await libp2pCrypto.keys.generateKeyPair('Ed25519');
+
+  // For storage, we marshal the key to bytes.
+  const marshalledKey = libp2pCrypto.keys.privateKeyToProtobuf(privateKey);
 
   const walletData = {
     version: '1.0',
     type: 'Ed25519',
     accountType,
-    country: countryOfBirth, // Using countryOfBirth for wallet metadata
-    city: cityOfBirth,       // Using cityOfBirth for wallet metadata
-    nullifier, // Storing the nullifier, which can be null for non-individual types
+    country: countryOfBirth,
+    city: cityOfBirth,
+    nullifier,
+    // The base64 version is for saving to disk only.
     privateKey: Buffer.from(marshalledKey).toString('base64'),
     created: new Date().toISOString()
   };
 
-  await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8');
-  logger.info(`✅ New wallet created and saved (Account Type: ${accountType})`);
+  if (filePath) {
+    await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8');
+    logger.info(`✅ New wallet created and saved to ${filePath} (Account Type: ${accountType})`);
+  }
 
-  // Remove the base64 private key from the wallet data that will be returned
-  // to avoid overwriting the privateKey object in the final returned object.
+  // Remove the base64 private key from the data we will merge into the final object.
   delete walletData.privateKey;
 
+  // Return the live, canonical private key object along with the rest of the metadata.
   return {
-    privateKey, // The actual crypto key object
-    ...walletData // The rest of the wallet metadata
+    privateKey,
+    ...walletData
   };
 }
