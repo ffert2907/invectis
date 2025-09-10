@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star, List, Building, Factory } from 'lucide-react';
 import { QRCodeSVG as QRCode } from 'qrcode.react';
 //import { QRCodeSVG as QRCode } from code.react';
@@ -6,6 +7,7 @@ import countries from './countries';
 import Receive from './Receive';
 import SendComponent from './Send';
 import BottomNav from './BottomNav';
+import LanguageSelector from './LanguageSelector';
 
 const AccountIcon = ({ type, className }) => {
   if (type === 'individual') {
@@ -17,6 +19,7 @@ const AccountIcon = ({ type, className }) => {
 };
 
 function App() {
+  const { t } = useTranslation();
   const [vectors, setVectors] = useState([]);
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedWallet, setSelectedWallet] = useState(0);
@@ -165,19 +168,17 @@ function App() {
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl shadow-lg">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-white">Invectis</h1>
+            <h1 className="text-2xl font-bold text-white">{t('invectis')}</h1>
             <p className="text-green-200 text-sm">{wallets[selectedWallet]?.name}</p>
           </div>
           <div className="flex space-x-3">
+            <LanguageSelector />
             <button
               onClick={() => setShowBalance(!showBalance)}
               className="p-2 bg-green-800 rounded-full"
             >
               {showBalance ? <Eye className="w-5 h-5 text-green-200" /> : <EyeOff className="w-5 h-5 text-green-200" />}
             </button>
-            <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center">
-              <div className="w-3 h-3 bg-gray-900 rounded-full"></div>
-            </div>
           </div>
         </div>
 
@@ -203,7 +204,7 @@ function App() {
           <div className="flex items-center justify-center text-green-200 text-sm mb-1">
             {wallets[selectedWallet]?.accountType === 'individual' && <User className="w-4 h-4 mr-2" />}
             {wallets[selectedWallet]?.accountType === 'entreprise' && <Factory className="w-4 h-4 mr-2" />}
-            <span>Solde Principal</span>
+            <span>{t('mainBalance')}</span>
           </div>
           <h2 className="text-4xl font-bold text-white mb-1 flex items-center justify-center">
             {showBalance && wallets[selectedWallet] ? `${wallets[selectedWallet].balance.main.toFixed(2)}` : '••••••'}
@@ -219,7 +220,7 @@ function App() {
         {/* Graphique Vectoriel */}
         <div className="bg-green-800/30 rounded-2xl p-4 mb-6">
           <div className="flex justify-between items-center mb-3">
-            <p className="text-green-200 text-sm font-medium">Répartition Vectorielle</p>
+            <p className="text-green-200 text-sm font-medium">{t('vectorialDistribution')}</p>
             <TrendingUp className="w-4 h-4 text-amber-400" />
           </div>
           <div className="grid grid-cols-9 gap-1 mb-3">
@@ -252,14 +253,14 @@ function App() {
             className="flex-1 bg-amber-500 text-gray-900 font-semibold py-4 rounded-2xl flex items-center justify-center space-x-2 hover:bg-amber-400 transition-colors"
           >
             <Send className="w-5 h-5" />
-            <span>Envoyer</span>
+            <span>{t('send')}</span>
           </button>
           <button
             onClick={() => setCurrentView('receive')}
             className="flex-1 bg-green-700 text-white font-semibold py-4 rounded-2xl flex items-center justify-center space-x-2 hover:bg-green-600 transition-colors"
           >
             <Download className="w-5 h-5" />
-            <span>Recevoir</span>
+            <span>{t('receive')}</span>
           </button>
         </div>
       </div>
@@ -286,7 +287,7 @@ function App() {
   const renderWallets = () => (
     <div className="flex flex-col h-full bg-gray-900">
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl">
-        <h1 className="text-2xl font-bold text-white mb-2">Mes Wallets</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">{t('wallets')}</h1>
         <p className="text-green-200 text-sm">Gérez vos portefeuilles crypto</p>
       </div>
 
@@ -321,7 +322,7 @@ function App() {
           ))}
 
           <button onClick={() => setCurrentView('addWalletInfo')} className="w-full bg-green-800 text-white font-semibold py-4 rounded-2xl border-2 border-dashed border-green-600 hover:bg-green-700 transition-colors">
-            + Ajouter un wallet
+            + {t('addWallet')}
           </button>
         </div>
       </div>
@@ -333,7 +334,7 @@ function App() {
   const renderAccount = () => (
     <div className="flex flex-col h-full bg-gray-900">
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl">
-        <h1 className="text-2xl font-bold text-white mb-2">Compte</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">{t('account')}</h1>
         <p className="text-green-200 text-sm">Informations personnelles</p>
       </div>
 
@@ -379,7 +380,7 @@ function App() {
   const renderSettings = () => (
     <div className="flex flex-col h-full bg-gray-900">
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl">
-        <h1 className="text-2xl font-bold text-white mb-2">Paramètres</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">{t('settings')}</h1>
         <p className="text-green-200 text-sm">Configuration de l'application</p>
       </div>
 
@@ -451,7 +452,7 @@ function App() {
   const renderTransactions = () => (
     <div className="flex flex-col h-full bg-gray-900">
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl">
-        <h1 className="text-2xl font-bold text-white mb-2">Transactions</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">{t('transactions')}</h1>
         <p className="text-green-200 text-sm">Historique de vos transactions</p>
       </div>
 
