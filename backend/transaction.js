@@ -263,12 +263,7 @@ export async function verifyTransaction(transaction, authorPeerId) {
     const dataBytes = encoder.encode(stableStringify(dataToVerify))
     
     // Vérification de la signature
-    const isValid = await authorPeerId.publicKey.verify(dataBytes, signatureBytes)
-    console.log(`Verification for transaction type ${transaction.type} from ${transaction.author}: ${isValid}`);
-    if (!isValid) {
-        console.log('Data that failed verification:', stableStringify(dataToVerify));
-    }
-    return isValid;
+    return await authorPeerId.publicKey.verify(dataBytes, signatureBytes)
   } catch (error) {
     console.error('Erreur lors de la vérification:', error)
     return false

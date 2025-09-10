@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'fs/promises';
 import { logger } from './config.js';
 import { generateNullifier } from './identity.js';
+import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 
 /**
  * Loads a wallet from a file.
@@ -19,6 +20,7 @@ export async function loadWalletFromFile(filePath) {
   const libp2pCrypto = await import('@libp2p/crypto')
   const marshalledPrivKey = new Uint8Array(Buffer.from(walletData.privateKey, 'base64'))
   const privateKey = await libp2pCrypto.keys.privateKeyFromProtobuf(marshalledPrivKey)
+  const peerId = await peerIdFromPrivateKey(privateKey)
 
   const accountType = walletData.accountType || 'standard'
   const country = walletData.country
@@ -28,6 +30,7 @@ export async function loadWalletFromFile(filePath) {
 
   return {
     privateKey,
+    peerId,
     accountType,
     country,
     city,
@@ -119,6 +122,7 @@ export async function createWallet(filePath, {
   // Unmarshall it back to a key object. This "round-trip" ensures the key object
   // has the exact same structure as a key loaded from a file.
   const privateKey = await libp2pCrypto.keys.privateKeyFromProtobuf(marshalledKey);
+  const peerId = await peerIdFromPrivateKey(privateKey);
 
   const walletData = {
     version: '1.0',
@@ -140,6 +144,7 @@ export async function createWallet(filePath, {
 
   return {
     privateKey, // The actual crypto key object
+    peerId,
     ...walletData // The rest of the wallet metadata
   };
 }
