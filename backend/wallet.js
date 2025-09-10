@@ -128,20 +128,23 @@ export async function createWallet(filePath, {
     version: '1.0',
     type: 'Ed25519',
     accountType,
-    country: countryOfBirth, // Using countryOfBirth for wallet metadata
-    city: cityOfBirth,       // Using cityOfBirth for wallet metadata
-    nullifier, // Storing the nullifier, which can be null for non-individual types
+    country: countryOfBirth,
+    city: cityOfBirth,
+    nullifier,
+    // The base64 version is for saving to disk only.
     privateKey: Buffer.from(marshalledKey).toString('base64'),
     created: new Date().toISOString()
   };
 
-  await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8');
-  logger.info(`✅ New wallet created and saved (Account Type: ${accountType})`);
+  if (filePath) {
+    await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8');
+    logger.info(`✅ New wallet created and saved to ${filePath} (Account Type: ${accountType})`);
+  }
 
-  // Remove the base64 private key from the wallet data that will be returned
-  // to avoid overwriting the privateKey object in the final returned object.
+  // Remove the base64 private key from the data we will merge into the final object.
   delete walletData.privateKey;
 
+  // Return the live, canonical private key object along with the rest of the metadata.
   return {
     privateKey, // The actual crypto key object
     peerId,

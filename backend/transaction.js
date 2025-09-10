@@ -39,16 +39,18 @@ export async function updateRates(newRates) {
  * Crée une transaction de paiement factice
  * @param {PeerId} authorPeerId - Identité de l'expéditeur
  * @param {PeerId} recipientPeerId - Identité du destinataire
- * @param {string} accountType - Le type de compte de l'expéditeur
+ * @param {number} amount - Le montant de la transaction.
+ * @param {number} nonce - Le nonce de la transaction.
  * @returns {Object} - Transaction non signée
  */
-export function createPaymentPayload(wallet, recipientPeerId, description, reference) {
+export function createPaymentPayload(wallet, recipientPeerId, amount, nonce, description, reference) {
   // No rights check for this transaction type
   return {
     to: recipientPeerId.toString(),
     description: description || '',
     reference: reference || '',
-    amount: Math.floor(Math.random() * 100) + 1,
+    amount: amount,
+    nonce: nonce,
     currency: 'TOKEN'
   }
 }
@@ -219,9 +221,10 @@ export function createSetDailyBonusPayload(wallet, walletBalance, dailyTransacti
  * @param {object} wallet - Le portefeuille de l'expéditeur
  * @param {PeerId} recipientPeerId - Identité du destinataire
  * @param {object} vectorValues - Les valeurs pour chaque vecteur
+ * @param {number} nonce - Le nonce de la transaction.
  * @returns {Promise<Object>} - Transaction non signée
  */
-export async function createVectorPayload(wallet, recipientPeerId, vectorValues, description, reference) {
+export async function createVectorPayload(wallet, recipientPeerId, vectorValues, nonce, description, reference) {
   hasRight(wallet.accountType, 'VECTOR_TRANSACTION')
   const { currentRates } = await getRates()
   let totalTime = 0
@@ -240,7 +243,8 @@ export async function createVectorPayload(wallet, recipientPeerId, vectorValues,
     description: description || '',
     reference: reference || '',
     vectors: vectorValues,
-    totalTime: totalTime
+    totalTime: totalTime,
+    nonce: nonce
   }
 }
 

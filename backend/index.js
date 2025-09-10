@@ -22,6 +22,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { mkdir } from 'fs/promises'
 import { startNode, appContext } from './core.js'
+import { calculateBalance, getNonce } from './ledger.js'
 
 const peerAddress = process.argv[3]
 const customDataDir = process.argv[4]
@@ -113,17 +114,62 @@ async function main() {
                 logger.prod('----------------------------\n')
                 break
               case '1':
-                type = 'PAYMENT'
-                payload = createPaymentPayload(appContext.wallet, recipientPeerId, 'Payment', 'ref-payment-001')
-                break
-              case '2':
-                type = 'VECTOR_TRANSACTION'
-                const vectorValues = {}
-                for (const vector of VECTORS) {
-                  vectorValues[vector[0]] = Math.floor(Math.random() * 10)
+                {
+                  type = 'PAYMENT'
+                  const balance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j)
+                  logger.info(`Your current balance is: ${balance}`)
+                  if (balance <= 0) {
+                    logger.warn('You have no funds to send.')
+                    askForTransaction()
+                    return
+                  }
+
+                  rl.question(`Enter amount to send (max ${balance}): `, async (amountStr) => {
+                    const amount = parseFloat(amountStr)
+                    if (isNaN(amount) || amount <= 0 || amount > balance) {
+                      logger.error('Invalid amount.')
+                      askForTransaction()
+                      return
+                    }
+
+                    try {
+                      const nonce = await getNonce(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j)
+                      const payload = createPaymentPayload(appContext.wallet, recipientPeerId, amount, nonce, 'Payment', `ref-payment-${nonce}`)
+
+                      const transactionToSign = {
+                        parents: appContext.dagHeads.map(cid => cid.toString()),
+                        author: appContext.wallet.peerId.toString(),
+                        timestamp: Date.now(),
+                        type,
+                        payload
+                      };
+                      const signedTransaction = await signTransaction(transactionToSign, appContext.wallet.sign);
+                      const cid = await appContext.j.add(signedTransaction);
+                      const parentStrings = signedTransaction.parents || [];
+                      const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()));
+                      appContext.dagHeads = [...remainingHeads, cid];
+                      const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
+                      await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, messageBytes);
+                      logger.info('✅ Transaction published to the network!');
+                    } catch (e) {
+                      logger.error('Error creating payment:', e.message)
+                    } finally {
+                      askForTransaction()
+                    }
+                  })
+                  return; // Important: We are handling async questioning, so return here.
                 }
-                payload = await createVectorPayload(appContext.wallet, recipientPeerId, vectorValues, 'Vector Transaction', 'ref-vector-001')
-                break
+              case '2':
+                {
+                  type = 'VECTOR_TRANSACTION'
+                  const vectorValues = {}
+                  for (const vector of VECTORS) {
+                    vectorValues[vector[0]] = Math.floor(Math.random() * 10)
+                  }
+                  const nonce = await getNonce(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j)
+                  payload = await createVectorPayload(appContext.wallet, recipientPeerId, vectorValues, nonce, 'Vector Transaction', `ref-vector-${nonce}`)
+                  break
+                }
               case '3':
                  type = 'SETRATERATIO'
                  const newRates = {}
