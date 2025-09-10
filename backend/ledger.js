@@ -236,3 +236,4 @@ export async function hasReceivedBonusToday(peerId, dagHeads, heliaInstance) {
 
   return false; // No bonus transaction found
 }
+

@@ -64,7 +64,10 @@ async function main() {
         for (const file of walletFiles) {
           try {
             const filePath = path.join(dataDir, file);
+            // load wallet in quiet mode (not log any loading action to not pollute the logs)
             const loadedWallet = await loadWalletFromFile(filePath, { quiet: true });
+//            const loadedWallet = await loadWalletFromFile(filePath);  // keep this line in case of...
+
             const balance = await calculateBalance(loadedWallet.peerId.toString(), appContext.dagHeads, appContext.j);
 
             const walletInfo = {
