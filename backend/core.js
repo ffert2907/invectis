@@ -1,8 +1,10 @@
 import { createNode } from './p2p.js'
 import { verifyTransaction } from './transaction.js'
-import { calculateBalance, getNonce } from './ledger.js'
+import { calculateBalance, getNonce, hasReceivedBonusToday, calculateDailyTransactionSum } from './ledger.js'
 import { formatTransactionForFrontend } from './api.js'
 import { peerIdFromString } from '@libp2p/peer-id'
+import { createSetDailyBonusPayload, signTransaction } from './transaction.js';
+import { TextEncoder } from 'util';
 import { json } from '@helia/json'
 import { logger } from './config.js'
 
@@ -38,7 +40,7 @@ export async function startNode(wallet, datastorePath) {
   // The peerId is already in the wallet object from wallet.js
   appContext.wallet.sign = (data) => wallet.privateKey.sign(data)
 
-  logger.info('Core: Identity:', appContext.wallet.peerId.toString())
+  logger.info(`Core: Identity: ${appContext.wallet.peerId.toString()}`)
 
   // 3. Start the node
   await node.start()
@@ -125,4 +127,55 @@ export async function startNode(wallet, datastorePath) {
       logger.error('Core: Error processing message:', error)
     }
   })
+}
+
+/**
+ * Checks for and applies the daily bonus if the user is eligible.
+ * This function is designed to be called before any payment transaction.
+ * @param {object} [deps] - Optional dependencies for testing.
+ * @param {function} [deps.hasReceivedBonusToday]
+ * @param {function} [deps.calculateBalance]
+ * @param {function} [deps.calculateDailyTransactionSum]
+ */
+export async function applyAutomaticBonus(deps = {}) {
+  const {
+    hasReceivedBonusToday: _hasReceivedBonusToday = hasReceivedBonusToday,
+    calculateBalance: _calculateBalance = calculateBalance,
+    calculateDailyTransactionSum: _calculateDailyTransactionSum = calculateDailyTransactionSum
+  } = deps;
+
+  const alreadyReceivedBonus = await _hasReceivedBonusToday(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+
+  if (!alreadyReceivedBonus) {
+    logger.info('User has not received a daily bonus today. Calculating now...');
+    const bonusWalletBalance = await _calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+    const bonusDailyTransactionSum = await _calculateDailyTransactionSum(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+    const bonusPayload = createSetDailyBonusPayload(appContext.wallet, bonusWalletBalance, bonusDailyTransactionSum, 'Automatic Daily Bonus', 'ref-auto-bonus-001');
+
+    if (bonusPayload && bonusPayload.bonus > 0) {
+      logger.info(`✅ Awarding an automatic daily bonus of ${bonusPayload.bonus}.`);
+      const bonusTransactionToSign = {
+        parents: appContext.dagHeads.map(cid => cid.toString()),
+        author: appContext.wallet.peerId.toString(),
+        timestamp: Date.now(),
+        type: 'SETDAILYBONUS',
+        payload: bonusPayload
+      };
+      const signedBonusTransaction = await signTransaction(bonusTransactionToSign, appContext.wallet.sign);
+      const bonusCid = await appContext.j.add(signedBonusTransaction);
+
+      // Update DAG heads correctly
+      const parentStrings = signedBonusTransaction.parents || [];
+      const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()));
+      appContext.dagHeads = [...remainingHeads, bonusCid];
+
+      const bonusMessageBytes = new TextEncoder().encode(JSON.stringify(signedBonusTransaction));
+      await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, bonusMessageBytes);
+      logger.info('✅ Bonus transaction published to the network!');
+    } else {
+      logger.info('No automatic daily bonus to add at this time.');
+    }
+  } else {
+    logger.info('User has already received a daily bonus today.');
+  }
 }
