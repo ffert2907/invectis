@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import { mkdir, readdir, readFile, writeFile } from 'fs/promises'
 import { logger } from './config.js'
 import { loadWalletFromFile, createWallet } from './wallet.js'
-import { startNode, appContext } from './core.js'
+import { startNode, appContext, applyAutomaticBonus } from './core.js'
 import { VECTORS } from './vectors.js'
 import {
   signTransaction,
@@ -25,7 +25,7 @@ import { TextEncoder } from 'util'
 import { calculateBalance } from './ledger.js'
 
 const PORT = process.env.PORT || 3000
-const WALLET_FILE = process.argv[2] || 'wallet.dat'
+const WALLET_FILE = process.env.WALLET_FILE || process.argv[2] || 'wallet.dat'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -252,7 +252,9 @@ async function main() {
 
         switch (type.toUpperCase()) {
           case 'PAYMENT':
-            transactionPayload = createPaymentPayload(appContext.wallet, getRecipientPeerId(payload.to), description, reference)
+            // Apply automatic bonus if eligible before creating the payment
+            await applyAutomaticBonus();
+            transactionPayload = createPaymentPayload(appContext.wallet, getRecipientPeerId(payload.to), payload.amount, payload.nonce, description, reference)
             break
           case 'VECTOR_TRANSACTION':
             transactionPayload = await createVectorPayload(appContext.wallet, getRecipientPeerId(payload.to), payload.vectors, description, reference)

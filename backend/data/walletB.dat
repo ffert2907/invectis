@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "type": "Ed25519",
+  "accountType": "individual",
+  "country": "US",
+  "city": "TestCityB",
+  "nullifier": "some-nullifier-b",
+  "privateKey": "CAESQJdCGiRUlbCkeRme42UtIpYBuXMlZb0PsFDSd2KSx3GBYa2lsLuQqvoWrc7zH5pZK+yHJH3LqrugeK+hfUuaGrQ=",
+  "created": "2024-01-01T00:00:00.000Z"
+}

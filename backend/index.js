@@ -21,7 +21,7 @@ import { logger } from './config.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { mkdir } from 'fs/promises'
-import { startNode, appContext } from './core.js'
+import { startNode, appContext, applyAutomaticBonus } from './core.js'
 import { calculateBalance, getNonce, calculateDailyTransactionSum } from './ledger.js'
 
 const peerAddress = process.argv[3]
@@ -115,51 +115,57 @@ async function main() {
                 break
               case '1':
                 {
-                  type = 'PAYMENT'
+                  type = 'PAYMENT';
                   logger.info('--- Create a new Payment ---');
-                  const balance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j)
+
+                  // Apply automatic bonus if eligible
+                  await applyAutomaticBonus();
+
+                  // Proceed with payment
+                  const balance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+
                   logger.info(`Your current account balance is: ${balance}`);
                   if (balance <= 0) {
-                    logger.warn('You have no funds to send.')
-                    askForTransaction()
-                    return
+                    logger.warn('You have no funds to send.');
+                    askForTransaction();
+                    return;
                   }
 
                   logger.info('Please enter the amount you would like to send.');
                   rl.question(`Enter amount to send (max ${balance}): `, async (amountStr) => {
-                    const amount = parseFloat(amountStr)
+                    const amount = parseFloat(amountStr);
                     if (isNaN(amount) || amount <= 0 || amount > balance) {
-                      logger.error('Invalid amount.')
-                      askForTransaction()
-                      return
+                      logger.error('Invalid amount.');
+                      askForTransaction();
+                      return;
                     }
 
                     try {
-                      const nonce = await getNonce(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j)
-                      const payload = createPaymentPayload(appContext.wallet, recipientPeerId, amount, nonce, 'Payment', `ref-payment-${nonce}`)
+                      const nonce = await getNonce(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+                      const paymentPayload = createPaymentPayload(appContext.wallet, recipientPeerId, amount, nonce, 'Payment', `ref-payment-${nonce}`);
 
-                      const transactionToSign = {
+                      const paymentTransactionToSign = {
                         parents: appContext.dagHeads.map(cid => cid.toString()),
                         author: appContext.wallet.peerId.toString(),
                         timestamp: Date.now(),
                         type,
-                        payload
+                        payload: paymentPayload
                       };
-                      const signedTransaction = await signTransaction(transactionToSign, appContext.wallet.sign);
-                      const cid = await appContext.j.add(signedTransaction);
-                      const parentStrings = signedTransaction.parents || [];
+                      const signedPaymentTransaction = await signTransaction(paymentTransactionToSign, appContext.wallet.sign);
+                      const paymentCid = await appContext.j.add(signedPaymentTransaction);
+                      const parentStrings = signedPaymentTransaction.parents || [];
                       const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()));
-                      appContext.dagHeads = [...remainingHeads, cid];
-                      const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
-                      await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, messageBytes);
-                      logger.info('✅ Transaction published to the network!');
+                      appContext.dagHeads = [...remainingHeads, paymentCid];
+                      const paymentMessageBytes = new TextEncoder().encode(JSON.stringify(signedPaymentTransaction));
+                      await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, paymentMessageBytes);
+                      logger.info('✅ Payment transaction published to the network!');
                     } catch (e) {
-                      logger.error('Error creating payment:', e.message)
+                      logger.error('Error creating payment:', e.message);
                     } finally {
-                      askForTransaction()
+                      askForTransaction();
                     }
-                  })
-                  return; // Important: We are handling async questioning, so return here.
+                  });
+                  return;
                 }
               case '2':
                 {
