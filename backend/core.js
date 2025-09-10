@@ -30,12 +30,12 @@ export async function startNode(wallet, datastorePath) {
 
   // 1. Store wallet and create the P2P node
   appContext.wallet = wallet
-  const node = await createNode(wallet.privateKey, datastorePath)
+  const node = await createNode(wallet.peerId, datastorePath)
   appContext.node = node
   appContext.j = json(node)
 
   // 2. Augment wallet object with node-derived info
-  appContext.wallet.peerId = node.libp2p.peerId
+  // The peerId is already in the wallet object from wallet.js
   appContext.wallet.sign = (data) => wallet.privateKey.sign(data)
 
   logger.info('Core: Identity:', appContext.wallet.peerId.toString())
