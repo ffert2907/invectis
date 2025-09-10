@@ -2,6 +2,7 @@ import { peerIdFromString } from '@libp2p/peer-id'
 import { promises as fs } from 'fs';
 import { VECTORS } from './vectors.js';
 import { ACCOUNT_RIGHTS } from './rights.js';
+import stableStringify from 'json-stable-stringify';
 
 let ratesCache = null;
 
@@ -259,10 +260,15 @@ export async function verifyTransaction(transaction, authorPeerId) {
 
     // Conversion des données en Uint8Array pour la vérification
     const encoder = new TextEncoder()
-    const dataBytes = encoder.encode(JSON.stringify(dataToVerify))
+    const dataBytes = encoder.encode(stableStringify(dataToVerify))
     
     // Vérification de la signature
-    return await authorPeerId.publicKey.verify(dataBytes, signatureBytes)
+    const isValid = await authorPeerId.publicKey.verify(dataBytes, signatureBytes)
+    console.log(`Verification for transaction type ${transaction.type} from ${transaction.author}: ${isValid}`);
+    if (!isValid) {
+        console.log('Data that failed verification:', stableStringify(dataToVerify));
+    }
+    return isValid;
   } catch (error) {
     console.error('Erreur lors de la vérification:', error)
     return false
@@ -278,7 +284,7 @@ export async function verifyTransaction(transaction, authorPeerId) {
 export async function signTransaction(transaction, signFunction) {
   // Conversion des données en Uint8Array pour la signature
   const encoder = new TextEncoder()
-  const dataBytes = encoder.encode(JSON.stringify(transaction))
+  const dataBytes = encoder.encode(stableStringify(transaction))
   
   // Signature des données
   const signature = await signFunction(dataBytes)

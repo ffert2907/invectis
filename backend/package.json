@@ -29,6 +29,7 @@
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "helia": "^5.5.1",
+    "json-stable-stringify": "^1.3.0",
     "libp2p": "^2.10.0",
     "winston": "^3.17.0"
   }
