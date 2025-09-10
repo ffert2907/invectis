@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import { mkdir, readdir, readFile, writeFile } from 'fs/promises'
 import { logger } from './config.js'
 import { loadWalletFromFile, createWallet } from './wallet.js'
-import { startNode, appContext } from './core.js'
+import { startNode, appContext, applyAutomaticBonus } from './core.js'
 import { VECTORS } from './vectors.js'
 import {
   signTransaction,
@@ -22,9 +22,10 @@ import {
 } from './transaction.js'
 import { peerIdFromString, peerIdFromPrivateKey } from '@libp2p/peer-id'
 import { TextEncoder } from 'util'
+import { calculateBalance } from './ledger.js'
 
 const PORT = process.env.PORT || 3000
-const WALLET_FILE = process.argv[2] || 'wallet.dat'
+const WALLET_FILE = process.env.WALLET_FILE || process.argv[2] || 'wallet.dat'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -61,22 +62,32 @@ async function main() {
         const walletFiles = files.filter(file => file.endsWith('.json') || file.endsWith('.dat'));
         const wallets = [];
         for (const file of walletFiles) {
-          const filePath = path.join(dataDir, file);
-          const walletData = await readFile(filePath, 'utf8');
-          const wallet = JSON.parse(walletData);
-          wallet.id = file;
-          wallet.name = wallet.name || file.replace(/\.(json|dat)$/, '');
-          wallet.address = wallet.address || `addr_${file.slice(0,12)}...`; // Mock address
-          wallet.balance = {
-            main: Math.random() * 1000,
-            vectors: Array(9).fill(0).map(() => Math.random() * 100)
-          };
-          wallets.push(wallet);
+          try {
+            const filePath = path.join(dataDir, file);
+            const loadedWallet = await loadWalletFromFile(filePath, { quiet: true });
+            const balance = await calculateBalance(loadedWallet.peerId.toString(), appContext.dagHeads, appContext.j);
+
+            const walletInfo = {
+              id: file,
+              name: file.replace(/\.(json|dat)$/, ''),
+              address: loadedWallet.peerId.toString(),
+              balance: {
+                main: balance,
+                vectors: Array(9).fill(0)
+              },
+              accountType: loadedWallet.accountType,
+              country: loadedWallet.country,
+              city: loadedWallet.city,
+            };
+            wallets.push(walletInfo);
+          } catch (loadError) {
+            logger.error(`Could not load or process wallet ${file}: ${loadError.message}`);
+            // Optionally skip this wallet or add an error state
+          }
         }
         res.json(wallets);
       } catch (error) {
         if (error.code === 'ENOENT') {
-          // data directory doesn't exist, return empty array
           return res.json([]);
         }
         logger.error(`Failed to get wallets: ${error.message}`);
@@ -241,7 +252,9 @@ async function main() {
 
         switch (type.toUpperCase()) {
           case 'PAYMENT':
-            transactionPayload = createPaymentPayload(appContext.wallet, getRecipientPeerId(payload.to), description, reference)
+            // Apply automatic bonus if eligible before creating the payment
+            await applyAutomaticBonus();
+            transactionPayload = createPaymentPayload(appContext.wallet, getRecipientPeerId(payload.to), payload.amount, payload.nonce, description, reference)
             break
           case 'VECTOR_TRANSACTION':
             transactionPayload = await createVectorPayload(appContext.wallet, getRecipientPeerId(payload.to), payload.vectors, description, reference)
@@ -303,9 +316,20 @@ async function main() {
 
     // Start server
     const server = app.listen(PORT, () => {
-      logger.prod(`🚀 Server is running at http://localhost:${PORT}`)
-      logger.prod(`✅ Wallet loaded: ${walletFile}`)
-    })
+      logger.prod(`🚀 Server is running at http://localhost:${PORT}`);
+      logger.prod(`✅ Wallet loaded: ${walletFile}`);
+
+      // Find and log the recommended address for local connections
+      const allAddresses = appContext.node.libp2p.getMultiaddrs().map(a => a.toString());
+      const localWsAddress = allAddresses.find(a => a.includes('/ip4/127.0.0.1/') && a.includes('/ws'));
+
+      if (localWsAddress) {
+        logger.prod('------------------------------------------------------------------');
+        logger.prod('To connect a local client, use this address:');
+        logger.prod(localWsAddress);
+        logger.prod('------------------------------------------------------------------');
+      }
+    });
 
     // Graceful shutdown
     process.on('SIGINT', async () => {

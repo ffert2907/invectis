@@ -6,27 +6,36 @@ import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 /**
  * Loads a wallet from a file.
  * @param {string} filePath - Path to the wallet file.
+ * @param {object} [options] - Optional settings.
+ * @param {boolean} [options.quiet=false] - If true, suppress verbose logs.
  * @returns {Promise<{privateKey: import('@libp2p/interface-keys').PrivateKey, accountType: string, country: string, city: string, nullifier: string}>} - Wallet data.
  */
-export async function loadWalletFromFile(filePath) {
-  logger.debug('Attempting to load wallet from:', filePath)
-  const data = await readFile(filePath, 'utf8')
-  const walletData = JSON.parse(data)
+export async function loadWalletFromFile(filePath, options = {}) {
+  const { quiet = false } = options;
+
+  if (!quiet) {
+    logger.debug('Attempting to load wallet from:', filePath);
+  }
+  const data = await readFile(filePath, 'utf8');
+  const walletData = JSON.parse(data);
 
   if (walletData.version !== '1.0' || !walletData.privateKey) {
-    throw new Error('Invalid or outdated wallet format.')
+    throw new Error('Invalid or outdated wallet format.');
   }
 
-  const libp2pCrypto = await import('@libp2p/crypto')
-  const marshalledPrivKey = new Uint8Array(Buffer.from(walletData.privateKey, 'base64'))
-  const privateKey = await libp2pCrypto.keys.privateKeyFromProtobuf(marshalledPrivKey)
-  const peerId = await peerIdFromPrivateKey(privateKey)
+  const libp2pCrypto = await import('@libp2p/crypto');
+  const marshalledPrivKey = new Uint8Array(Buffer.from(walletData.privateKey, 'base64'));
+  const privateKey = await libp2pCrypto.keys.privateKeyFromProtobuf(marshalledPrivKey);
+  const peerId = await peerIdFromPrivateKey(privateKey);
 
-  const accountType = walletData.accountType || 'standard'
-  const country = walletData.country
-  const city = walletData.city
-  const nullifier = walletData.nullifier // Changed from nationalIdHash
-  logger.info(`✅ Existing wallet loaded (Account Type: ${accountType})`)
+  const accountType = walletData.accountType || 'standard';
+  const country = walletData.country;
+  const city = walletData.city;
+  const nullifier = walletData.nullifier; // Changed from nationalIdHash
+
+  if (!quiet) {
+    logger.info(`✅ Existing wallet loaded (Account Type: ${accountType})`);
+  }
 
   return {
     privateKey,
