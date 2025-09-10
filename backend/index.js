@@ -22,7 +22,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { mkdir } from 'fs/promises'
 import { startNode, appContext } from './core.js'
-import { calculateBalance, getNonce } from './ledger.js'
+import { calculateBalance, getNonce, calculateDailyTransactionSum, hasReceivedBonusToday } from './ledger.js'
 
 const peerAddress = process.argv[3]
 const customDataDir = process.argv[4]
@@ -115,49 +115,85 @@ async function main() {
                 break
               case '1':
                 {
-                  type = 'PAYMENT'
-                  const balance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j)
-                  logger.info(`Your current balance is: ${balance}`)
-                  if (balance <= 0) {
-                    logger.warn('You have no funds to send.')
-                    askForTransaction()
-                    return
+                  type = 'PAYMENT';
+                  logger.info('--- Create a new Payment ---');
+
+                  // Automatic Daily Bonus Check
+                  const alreadyReceivedBonus = await hasReceivedBonusToday(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+                  if (!alreadyReceivedBonus) {
+                    logger.info('User has not received a daily bonus today. Calculating now...');
+                    const bonusWalletBalance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+                    const bonusDailyTransactionSum = await calculateDailyTransactionSum(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+                    const bonusPayload = createSetDailyBonusPayload(appContext.wallet, bonusWalletBalance, bonusDailyTransactionSum, 'Automatic Daily Bonus', 'ref-auto-bonus-001');
+
+                    if (bonusPayload && bonusPayload.bonus > 0) {
+                      logger.info(`✅ Awarding an automatic daily bonus of ${bonusPayload.bonus}.`);
+                      const bonusTransactionToSign = {
+                        parents: appContext.dagHeads.map(cid => cid.toString()),
+                        author: appContext.wallet.peerId.toString(),
+                        timestamp: Date.now(),
+                        type: 'SETDAILYBONUS',
+                        payload: bonusPayload
+                      };
+                      const signedBonusTransaction = await signTransaction(bonusTransactionToSign, appContext.wallet.sign);
+                      const bonusCid = await appContext.j.add(signedBonusTransaction);
+                      const parentStrings = signedBonusTransaction.parents || [];
+                      const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()));
+                      appContext.dagHeads = [...remainingHeads, bonusCid]; // Update DAG heads
+                      const bonusMessageBytes = new TextEncoder().encode(JSON.stringify(signedBonusTransaction));
+                      await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, bonusMessageBytes);
+                      logger.info('✅ Bonus transaction published to the network!');
+                    } else {
+                      logger.info('No automatic daily bonus to add at this time.');
+                    }
+                  } else {
+                    logger.info('User has already received a daily bonus today.');
                   }
 
+                  // Proceed with payment
+                  const balance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+                  logger.info(`Your current account balance is: ${balance}`);
+                  if (balance <= 0) {
+                    logger.warn('You have no funds to send.');
+                    askForTransaction();
+                    return;
+                  }
+
+                  logger.info('Please enter the amount you would like to send.');
                   rl.question(`Enter amount to send (max ${balance}): `, async (amountStr) => {
-                    const amount = parseFloat(amountStr)
+                    const amount = parseFloat(amountStr);
                     if (isNaN(amount) || amount <= 0 || amount > balance) {
-                      logger.error('Invalid amount.')
-                      askForTransaction()
-                      return
+                      logger.error('Invalid amount.');
+                      askForTransaction();
+                      return;
                     }
 
                     try {
-                      const nonce = await getNonce(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j)
-                      const payload = createPaymentPayload(appContext.wallet, recipientPeerId, amount, nonce, 'Payment', `ref-payment-${nonce}`)
+                      const nonce = await getNonce(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+                      const paymentPayload = createPaymentPayload(appContext.wallet, recipientPeerId, amount, nonce, 'Payment', `ref-payment-${nonce}`);
 
-                      const transactionToSign = {
+                      const paymentTransactionToSign = {
                         parents: appContext.dagHeads.map(cid => cid.toString()),
                         author: appContext.wallet.peerId.toString(),
                         timestamp: Date.now(),
                         type,
-                        payload
+                        payload: paymentPayload
                       };
-                      const signedTransaction = await signTransaction(transactionToSign, appContext.wallet.sign);
-                      const cid = await appContext.j.add(signedTransaction);
-                      const parentStrings = signedTransaction.parents || [];
+                      const signedPaymentTransaction = await signTransaction(paymentTransactionToSign, appContext.wallet.sign);
+                      const paymentCid = await appContext.j.add(signedPaymentTransaction);
+                      const parentStrings = signedPaymentTransaction.parents || [];
                       const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()));
-                      appContext.dagHeads = [...remainingHeads, cid];
-                      const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
-                      await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, messageBytes);
-                      logger.info('✅ Transaction published to the network!');
+                      appContext.dagHeads = [...remainingHeads, paymentCid];
+                      const paymentMessageBytes = new TextEncoder().encode(JSON.stringify(signedPaymentTransaction));
+                      await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, paymentMessageBytes);
+                      logger.info('✅ Payment transaction published to the network!');
                     } catch (e) {
-                      logger.error('Error creating payment:', e.message)
+                      logger.error('Error creating payment:', e.message);
                     } finally {
-                      askForTransaction()
+                      askForTransaction();
                     }
-                  })
-                  return; // Important: We are handling async questioning, so return here.
+                  });
+                  return;
                 }
               case '2':
                 {
@@ -179,11 +215,23 @@ async function main() {
                  payload = createSetRateRatioPayload(appContext.wallet, newRates, 'Set Rate Ratio', 'ref-rates-001')
                  break
               case '4':
-                 type = 'SETDAILYBONUS'
-                 const walletBalance = Math.random() * 20
-                 const dailyTransactionSum = (Math.random() * 20) - 10
-                 payload = createSetDailyBonusPayload(appContext.wallet, walletBalance, dailyTransactionSum, 'Daily Bonus', 'ref-bonus-001')
-                 break
+                {
+                  type = 'SETDAILYBONUS';
+                  const walletBalance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+                  const dailyTransactionSum = await calculateDailyTransactionSum(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+
+                  logger.info(`Current balance for bonus calculation: ${walletBalance}`);
+                  logger.info(`Today's transaction sum for bonus calculation: ${dailyTransactionSum}`);
+
+                  payload = createSetDailyBonusPayload(appContext.wallet, walletBalance, dailyTransactionSum, 'Daily Bonus', 'ref-bonus-001');
+
+                  if (payload && payload.bonus > 0) {
+                    logger.info(`✅ Daily bonus of ${payload.bonus} will be added.`);
+                  } else {
+                    logger.info('No daily bonus will be added at this time.');
+                  }
+                  break;
+                }
               case '5':
                  type = 'ASK_VALIDATION_ACCOUNT'
                  payload = createAskValidationAccountPayload(appContext.wallet, recipientPeerId, 'Ask for validation', 'ref-ask-validation-001')
