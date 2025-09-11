@@ -237,3 +237,56 @@ export async function hasReceivedBonusToday(peerId, dagHeads, heliaInstance) {
   return false; // No bonus transaction found
 }
 
+/**
+ * Traverses the transaction DAG to retrieve all transactions for a specific peerId.
+ * @param {string} peerId - The peerId string of the user whose transactions are being retrieved.
+ * @param {Array<CID>} dagHeads - An array of CIDs representing the current heads of the DAG.
+ * @param {object} heliaInstance - The Helia/JSON instance for retrieving transactions.
+ * @returns {Promise<Array<object>>} - A promise that resolves to an array of transactions.
+ */
+export async function getTransactions(peerId, dagHeads, heliaInstance) {
+  const transactions = [];
+  const visited = new Set();
+  const queue = [...dagHeads]; // Start with the current heads
+
+  while (queue.length > 0) {
+    const cid = queue.shift();
+    const cidString = cid.toString();
+
+    if (visited.has(cidString)) {
+      continue;
+    }
+    visited.add(cidString);
+
+    try {
+      const transaction = await heliaInstance.get(cid);
+      if (!transaction) continue;
+
+      let involved = false;
+      if (transaction.author === peerId) {
+        involved = true;
+      }
+
+      if (transaction.payload && transaction.payload.to === peerId) {
+        involved = true;
+      }
+
+      if (involved) {
+        transactions.push({ id: cidString, ...transaction });
+      }
+
+      if (transaction.parents && transaction.parents.length > 0) {
+        for (const parentCidString of transaction.parents) {
+          if (!visited.has(parentCidString)) {
+            queue.push(CID.parse(parentCidString));
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Error processing transaction with CID ${cidString}:`, error);
+    }
+  }
+
+  // Sort transactions by timestamp, descending
+  return transactions.sort((a, b) => b.timestamp - a.timestamp);
+}

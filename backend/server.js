@@ -22,7 +22,7 @@ import {
 } from './transaction.js'
 import { peerIdFromString, peerIdFromPrivateKey } from '@libp2p/peer-id'
 import { TextEncoder } from 'util'
-import { calculateBalance } from './ledger.js'
+import { calculateBalance, getTransactions } from './ledger.js'
 
 const PORT = process.env.PORT || 3000
 const WALLET_FILE = process.env.WALLET_FILE || process.argv[2] || 'wallet.dat'
@@ -95,6 +95,22 @@ async function main() {
         }
         logger.error(`Failed to get wallets: ${error.message}`);
         res.status(500).json({ error: 'Failed to get wallets' });
+      }
+    });
+
+    // GET /wallets/:peerId/transactions
+    app.get('/wallets/:peerId/transactions', async (req, res) => {
+      const { peerId } = req.params;
+      if (!peerId) {
+        return res.status(400).json({ error: 'PeerId is required' });
+      }
+
+      try {
+        const transactions = await getTransactions(peerId, appContext.dagHeads, appContext.j);
+        res.json(transactions);
+      } catch (error) {
+        logger.error(`Failed to get transactions for ${peerId}: ${error.message}`);
+        res.status(500).json({ error: 'Failed to get transactions' });
       }
     });
 
