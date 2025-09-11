@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star, List, Building, Factory } from 'lucide-react';
+import { Wallet, Send, Download, Settings, User, ChevronRight, Eye, EyeOff, MoreHorizontal, TrendingUp, Clock, ArrowUpRight, ArrowDownLeft, Circle, Star, List, Building, Factory, RefreshCw } from 'lucide-react';
 import { QRCodeSVG as QRCode } from 'qrcode.react';
 //import { QRCodeSVG as QRCode } from code.react';
 import countries from './countries';
@@ -54,22 +54,13 @@ function App() {
           });
         }
         if (eventName === 'new-transaction') {
-            const newTx = {
-                id: Date.now(), // Using timestamp for unique key
-                type: 'received', // Simplified for now
-                amount: data.type === 'PAYMENT' ? 10 : 0, // Mock amount
-                address: '... from backend',
-                description: `New ${data.type} Transaction`,
-                reference: 'N/A',
-                timestamp: new Date().toLocaleTimeString()
-            };
-            setTransactions(currentTxs => [newTx, ...currentTxs]);
+          console.log('New transaction event received. Data will be updated by polling.');
         }
       });
 
       return cleanup; // Cleanup listener on component unmount
     }
-  }, []);
+  }, [wallets, selectedWallet]);
 
   const fetchWallets = async () => {
     try {
@@ -105,6 +96,19 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const pollingInterval = setInterval(() => {
+      console.log('Polling for new data...');
+      fetchWallets();
+      if (wallets.length > 0 && wallets[selectedWallet]) {
+        const currentPeerId = wallets[selectedWallet].address;
+        fetchTransactions(currentPeerId);
+      }
+    }, 15000); // Poll every 15 seconds
+
+    return () => clearInterval(pollingInterval);
+  }, [wallets, selectedWallet]);
+
+  useEffect(() => {
     const storedPrincipalWalletId = localStorage.getItem('principalWalletId');
     if (storedPrincipalWalletId) {
       setPrincipalWalletId(JSON.parse(storedPrincipalWalletId));
@@ -125,6 +129,35 @@ function App() {
       }
     }
   }, [principalWalletId, wallets]);
+
+  const fetchTransactions = async (peerId) => {
+    if (!peerId) {
+      setTransactions([]);
+      return;
+    }
+    try {
+      const response = await fetch(`http://localhost:3000/wallets/${peerId}/transactions`);
+      if (response.ok) {
+        const fetchedTransactions = await response.json();
+        setTransactions(fetchedTransactions);
+      } else {
+        console.error('Failed to fetch transactions');
+        setTransactions([]);
+      }
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      setTransactions([]);
+    }
+  };
+
+  useEffect(() => {
+    if (wallets.length > 0 && wallets[selectedWallet]) {
+      const currentPeerId = wallets[selectedWallet].address;
+      fetchTransactions(currentPeerId);
+    } else {
+      setTransactions([]);
+    }
+  }, [selectedWallet, wallets]);
 
   useEffect(() => {
     const fetchVectors = async () => {
@@ -152,6 +185,15 @@ function App() {
     }));
   };
 
+  const handleRefresh = () => {
+    console.log('Manual refresh triggered.');
+    fetchWallets();
+    if (wallets.length > 0 && wallets[selectedWallet]) {
+      const currentPeerId = wallets[selectedWallet].address;
+      fetchTransactions(currentPeerId);
+    }
+  };
+
   const renderDashboard = () => (
     <div className="flex flex-col h-full bg-gray-900">
       {/* QR Code Modal */}
@@ -169,16 +211,21 @@ function App() {
         <div className="flex justify-between items-center mb-4">
           <div>
             <h1 className="text-2xl font-bold text-white">{t('invectis')}</h1>
-            <p className="text-green-200 text-sm">{wallets[selectedWallet]?.name}</p>
           </div>
           <div className="flex space-x-3">
-            <LanguageSelector />
             <button
               onClick={() => setShowBalance(!showBalance)}
               className="p-2 bg-green-800 rounded-full"
             >
               {showBalance ? <Eye className="w-5 h-5 text-green-200" /> : <EyeOff className="w-5 h-5 text-green-200" />}
             </button>
+            <button
+              onClick={handleRefresh}
+              className="p-2 bg-green-800 rounded-full"
+            >
+              <RefreshCw className="w-5 h-5 text-green-200" />
+            </button>
+            <LanguageSelector />
           </div>
         </div>
 
@@ -205,6 +252,7 @@ function App() {
             {wallets[selectedWallet]?.accountType === 'individual' && <User className="w-4 h-4 mr-2" />}
             {wallets[selectedWallet]?.accountType === 'entreprise' && <Factory className="w-4 h-4 mr-2" />}
             <span>{t('mainBalance')}</span>
+            <span className="text-xs ml-2">({wallets[selectedWallet]?.name})</span>
           </div>
           <h2 className="text-4xl font-bold text-white mb-1 flex items-center justify-center">
             {showBalance && wallets[selectedWallet] ? `${wallets[selectedWallet].balance.main.toFixed(2)}` : '••••••'}
@@ -449,65 +497,89 @@ function App() {
     </div>
   );
 
-  const renderTransactions = () => (
-    <div className="flex flex-col h-full bg-gray-900">
-      <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl">
-        <h1 className="text-2xl font-bold text-white mb-2">{t('transactions')}</h1>
-        <p className="text-green-200 text-sm">{t('transactionHistory')}</p>
-      </div>
+  const renderTransactions = () => {
+    const currentPeerId = wallets[selectedWallet]?.address;
 
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="space-y-3">
-          {transactions.map((tx) => (
-            <div key={tx.id} className="bg-gray-800 rounded-2xl p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className={`p-2 rounded-full ${tx.type === 'received' ? 'bg-green-600' : 'bg-red-600'}`}>
-                    {tx.type === 'received' ?
-                      <ArrowDownLeft className="w-4 h-4 text-white" /> :
-                      <ArrowUpRight className="w-4 h-4 text-white" />
-                    }
-                  </div>
-                  <div>
-                    <p className="text-white font-medium">{tx.description}</p>
-                    <p className="text-gray-400 text-sm">{tx.address}</p>
-                    <p className="text-gray-500 text-xs">Réf: {tx.reference}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className={`font-semibold ${tx.type === 'received' ? 'text-green-400' : 'text-red-400'}`}>
-                    {tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(2)} IVT-h
-                  </p>
-                  <p className="text-gray-400 text-sm">{tx.timestamp}</p>
-                  <button
-                    onClick={() => toggleVectorDetails(tx.id)}
-                    className="text-amber-400 text-xs mt-1 hover:text-amber-300"
-                  >
-                    {t('vectorDetails')}
-                  </button>
-                </div>
-              </div>
-
-              {showVectorDetails[tx.id] && (
-                <div className="mt-4 pt-4 border-t border-gray-700">
-                  <p className="text-gray-400 text-sm mb-2">{t('vectorialRepartition')}</p>
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    {conversionRates.map((rate, index) => (
-                      <div key={index} className="text-gray-300">
-                        {vectors[index + 1]?.[2]} {vectors[index + 1]?.[0] ?? `V${index + 2}`}: {(Math.abs(tx.amount) * rate).toFixed(2)}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+    return (
+      <div className="flex flex-col h-full bg-gray-900">
+        <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-white">
+              {t('transactions')}
+              <span className="text-lg ml-2">({wallets[selectedWallet]?.name})</span>
+            </h1>
+            <button
+              onClick={handleRefresh}
+              className="p-2 bg-green-800 rounded-full"
+            >
+              <RefreshCw className="w-5 h-5 text-green-200" />
+            </button>
+          </div>
         </div>
-      </div>
 
-      <BottomNav currentView={currentView} setCurrentView={setCurrentView} />
-    </div>
-  );
+        <div className="flex-1 p-6 overflow-y-auto">
+          <div className="space-y-3">
+            {transactions.map((tx) => {
+              const isReceived = tx.payload.to === currentPeerId || tx.type === 'SETDAILYBONUS';
+              const amount = tx.type === 'PAYMENT' ? tx.payload.amount :
+                             tx.type === 'VECTOR_TRANSACTION' ? tx.payload.totalTime :
+                             tx.type === 'SETDAILYBONUS' ? tx.payload.bonus : 0;
+              const otherParty = isReceived ? tx.author : tx.payload.to;
+
+              return (
+                <div key={tx.id} className="bg-gray-800 rounded-2xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className={`p-2 rounded-full ${isReceived ? 'bg-green-600' : 'bg-red-600'}`}>
+                        {isReceived ?
+                          <ArrowDownLeft className="w-4 h-4 text-white" /> :
+                          <ArrowUpRight className="w-4 h-4 text-white" />
+                        }
+                      </div>
+                      <div>
+                        <p className="text-white font-medium">{tx.payload.description || tx.type}</p>
+                        <p className="text-gray-400 text-sm truncate w-40">{otherParty}</p>
+                        <p className="text-gray-500 text-xs">Réf: {tx.payload.reference || 'N/A'}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-semibold ${isReceived ? 'text-green-400' : 'text-red-400'}`}>
+                        {isReceived ? '+' : '-'}{amount.toFixed(2)} IVT-h
+                      </p>
+                      <p className="text-gray-400 text-sm">{new Date(tx.timestamp).toLocaleString()}</p>
+                      {tx.type === 'VECTOR_TRANSACTION' && (
+                        <button
+                          onClick={() => toggleVectorDetails(tx.id)}
+                          className="text-amber-400 text-xs mt-1 hover:text-amber-300"
+                        >
+                          {t('vectorDetails')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {showVectorDetails[tx.id] && (
+                    <div className="mt-4 pt-4 border-t border-gray-700">
+                      <p className="text-gray-400 text-sm mb-2">{t('vectorialRepartition')}</p>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        {tx.payload.vectors.map((vec, index) => (
+                          <div key={index} className="text-gray-300">
+                            {vectors[index + 1]?.[2] ?? `V${index + 2}`}: {vec.time.toFixed(2)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <BottomNav currentView={currentView} setCurrentView={setCurrentView} />
+      </div>
+    );
+  };
 
   const renderAddWalletInfo = () => (
     <div className="flex flex-col h-full bg-gray-900 p-6">
