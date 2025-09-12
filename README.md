@@ -10,6 +10,10 @@ It may copy on the clipboard the adress to connect
 use ```_Lance-Noeud-1.bat``` or ```_Lance-Noeud-2.bat``` to launch nodes. Or use ```_Lance-Test-Connexion.bat``` to test connection after launching node 1.
 
 
+# TEST WALLETS
+Wallet1.dat : TOM JERRY 1999-10-10 FR PARIS
+wallet2.dat : DUFFY DUCK 1999-10-10 FR PARIS
+
 
 # Android app installation
 Here are the instructions to build and deploy the app to your Android device:
