@@ -31,348 +31,341 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 async function main() {
-  logger.prod('Starting in Server Mode...')
+  logger.prod('Starting in Server Mode...');
 
-  const dataDir = path.join(__dirname, 'data')
-  const walletFile = path.join(dataDir, WALLET_FILE)
+  const dataDir = path.join(__dirname, 'data');
+  const walletFile = path.join(dataDir, WALLET_FILE);
+  const datastorePath = path.join(dataDir, 'helia_server');
+  await mkdir(dataDir, { recursive: true });
 
+  // Try to load a default wallet and start the node at boot.
   try {
-    // Setup data directory and wallet path relative to the script file
-    await mkdir(dataDir, { recursive: true })
-    const datastorePath = path.join(dataDir, 'helia_server')
+    const wallet = await loadWalletFromFile(walletFile);
+    await startNode(wallet, datastorePath);
+    logger.prod(`✅ Default wallet ${WALLET_FILE} loaded and P2P node started.`);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      logger.warn(`Default wallet not found. Server is running in API-only mode.`);
+      logger.warn('Create or activate a wallet via the API to start the P2P node.');
+    } else {
+      // For other errors during initial load, we should probably exit.
+      logger.error('A critical error occurred during initial wallet load:', error);
+      process.exit(1);
+    }
+  }
 
-    // Load wallet (non-interactive)
-    const wallet = await loadWalletFromFile(walletFile)
+  // Setup Express server (this now runs regardless of whether the node started)
+  const app = express();
+  app.use(cors());
+  app.use(express.json());
 
-    // Start the core P2P node
-    await startNode(wallet, datastorePath)
+  // --- API Routes ---
 
-    // Setup Express server
-    const app = express()
-    app.use(cors())
-    app.use(express.json())
-
-    // --- API Routes ---
-
-    // GET /wallets
-    app.get('/wallets', async (req, res) => {
-      const dataDir = path.join(__dirname, 'data');
-      try {
-        const files = await readdir(dataDir);
-        const walletFiles = files.filter(file => file.endsWith('.json') || file.endsWith('.dat'));
-        const wallets = [];
-        for (const file of walletFiles) {
-          try {
-            const filePath = path.join(dataDir, file);
-            // load wallet in quiet mode (not log any loading action to not pollute the logs)
-            const loadedWallet = await loadWalletFromFile(filePath, { quiet: true });
-//            const loadedWallet = await loadWalletFromFile(filePath);  // keep this line in case of...
-
-            const balance = await calculateBalance(loadedWallet.peerId.toString(), appContext.dagHeads, appContext.j);
-
-            const walletInfo = {
-              id: file,
-              name: file.replace(/\.(json|dat)$/, ''),
-              address: loadedWallet.peerId.toString(),
-              balance: {
-                main: balance,
-                vectors: Array(9).fill(0)
-              },
-              accountType: loadedWallet.accountType,
-              country: loadedWallet.country,
-              city: loadedWallet.city,
-            };
-            wallets.push(walletInfo);
-          } catch (loadError) {
-            logger.error(`Could not load or process wallet ${file}: ${loadError.message}`);
-            // Optionally skip this wallet or add an error state
-          }
+  // GET /wallets
+  app.get('/wallets', async (req, res) => {
+    const dataDir = path.join(__dirname, 'data');
+    try {
+      const files = await readdir(dataDir);
+      const walletFiles = files.filter(file => file.endsWith('.json') || file.endsWith('.dat'));
+      const wallets = [];
+      for (const file of walletFiles) {
+        try {
+          const filePath = path.join(dataDir, file);
+          const loadedWallet = await loadWalletFromFile(filePath, { quiet: true });
+          const balance = await calculateBalance(loadedWallet.peerId.toString(), appContext.dagHeads, appContext.j);
+          const walletInfo = {
+            id: file,
+            name: file.replace(/\.(json|dat)$/, ''),
+            address: loadedWallet.peerId.toString(),
+            balance: {
+              main: balance,
+              vectors: Array(9).fill(0)
+            },
+            accountType: loadedWallet.accountType,
+            country: loadedWallet.country,
+            city: loadedWallet.city,
+          };
+          wallets.push(walletInfo);
+        } catch (loadError) {
+          logger.error(`Could not load or process wallet ${file}: ${loadError.message}`);
         }
-        res.json(wallets);
-      } catch (error) {
-        if (error.code === 'ENOENT') {
-          return res.json([]);
-        }
-        logger.error(`Failed to get wallets: ${error.message}`);
-        res.status(500).json({ error: 'Failed to get wallets' });
       }
-    });
-
-    // GET /wallets/:peerId/transactions
-    app.get('/wallets/:peerId/transactions', async (req, res) => {
-      const { peerId } = req.params;
-      if (!peerId) {
-        return res.status(400).json({ error: 'PeerId is required' });
+      res.json(wallets);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return res.json([]);
       }
+      logger.error(`Failed to get wallets: ${error.message}`);
+      res.status(500).json({ error: 'Failed to get wallets' });
+    }
+  });
 
-      try {
-        const transactions = await getTransactions(peerId, appContext.dagHeads, appContext.j);
-        res.json(transactions);
-      } catch (error) {
-        logger.error(`Failed to get transactions for ${peerId}: ${error.message}`);
-        res.status(500).json({ error: 'Failed to get transactions' });
-      }
-    });
+  // GET /wallets/:peerId/transactions
+  app.get('/wallets/:peerId/transactions', async (req, res) => {
+    const { peerId } = req.params;
+    if (!peerId) {
+      return res.status(400).json({ error: 'PeerId is required' });
+    }
+    try {
+      const transactions = await getTransactions(peerId, appContext.dagHeads, appContext.j);
+      res.json(transactions);
+    } catch (error) {
+      logger.error(`Failed to get transactions for ${peerId}: ${error.message}`);
+      res.status(500).json({ error: 'Failed to get transactions' });
+    }
+  });
 
-    // POST /wallets
-    app.post('/wallets', async (req, res) => {
-      const {
-        name,
+  // POST /wallets
+  app.post('/wallets', async (req, res) => {
+    const {
+      name,
+      accountType,
+      givenName,
+      familyName,
+      dateOfBirth,
+      countryOfBirth,
+      cityOfBirth
+    } = req.body;
+    const safeName = (name || '').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const walletFileName = `${safeName || 'wallet'}_${Date.now()}.json`;
+    const dataDir = path.join(__dirname, 'data');
+    const filePath = path.join(dataDir, walletFileName);
+    try {
+      const walletDetails = {
         accountType,
         givenName,
         familyName,
         dateOfBirth,
         countryOfBirth,
         cityOfBirth
-      } = req.body;
-
-      const safeName = (name || '').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-      const walletFileName = `${safeName || 'wallet'}_${Date.now()}.json`;
-      const dataDir = path.join(__dirname, 'data');
-      const filePath = path.join(dataDir, walletFileName);
-
-      try {
-        const walletDetails = {
-          accountType,
-          givenName,
-          familyName,
-          dateOfBirth,
-          countryOfBirth,
-          cityOfBirth
-        };
-        const {
+      };
+      const {
+        privateKey,
+        ...walletData
+      } = await createWallet(filePath, walletDetails);
+      if (walletData.accountType === 'individual' && walletData.nullifier) {
+        logger.info(`Individual wallet created, proceeding with registration transaction for nullifier: ${walletData.nullifier}`);
+        const peerId = await peerIdFromPrivateKey(privateKey);
+        const tempWallet = {
+          peerId,
           privateKey,
-          ...walletData
-        } = await createWallet(filePath, walletDetails);
-
-        // If it's an individual wallet, automatically create and publish a registration transaction
-        if (walletData.accountType === 'individual' && walletData.nullifier) {
-          logger.info(`Individual wallet created, proceeding with registration transaction for nullifier: ${walletData.nullifier}`);
-
-          // We need a peerId and a sign function for the new wallet to sign the transaction
-          const peerId = await peerIdFromPrivateKey(privateKey);
-          const tempWallet = {
-            peerId,
-            privateKey,
-            sign: (data) => privateKey.sign(data),
-            accountType: walletData.accountType
-          };
-
-          const registerPayload = createRegisterPayload(tempWallet, walletData.nullifier);
-
-          const transactionToSign = {
-            parents: appContext.dagHeads.map(cid => cid.toString()),
-            author: tempWallet.peerId.toString(),
-            timestamp: Date.now(),
-            type: 'REGISTER',
-            payload: registerPayload
-          };
-
-          const signedTransaction = await signTransaction(transactionToSign, tempWallet.sign);
-          const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
-          await appContext.node.libp2p.services.pubsub.publish('/invectis/global-ledger/1.0', messageBytes);
-
-          logger.prod(`✅ Published REGISTRATION transaction for ${tempWallet.peerId.toString()}`);
-        }
-
-        // Prepare response for the frontend
-        const createdWalletForFrontend = {
-          ...walletData,
-          id: walletFileName,
-          name: name,
-          balance: {
-            main: 0,
-            vectors: Array(9).fill(0)
-          },
-          address: `addr...${walletFileName.slice(0, 8)}`
+          sign: (data) => privateKey.sign(data),
+          accountType: walletData.accountType
         };
-        delete createdWalletForFrontend.privateKey; // Ensure private key is not sent to frontend
-
-        res.status(201).json(createdWalletForFrontend);
-      } catch (error) {
-        logger.error(`Failed to create wallet: ${error.message}`);
-        res.status(500).json({
-          error: 'Failed to create wallet',
-          details: error.message
-        });
-      }
-    });
-
-    // POST /wallets/import
-    app.post('/wallets/import', async (req, res) => {
-      const { name, walletData } = req.body;
-      if (!name || !walletData) {
-        return res.status(400).json({ error: 'Missing name or walletData' });
-      }
-
-      const dataDir = path.join(__dirname, 'data');
-      const safeName = name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
-      const filePath = path.join(dataDir, safeName);
-
-      try {
-        const parsedData = JSON.parse(walletData);
-        if (parsedData.version !== '1.0' || !parsedData.privateKey) {
-            throw new Error('Invalid wallet data format for import.');
-        }
-
-        await writeFile(filePath, JSON.stringify(parsedData, null, 2), 'utf8');
-        res.status(200).json({ message: 'Wallet imported successfully' });
-      } catch (error) {
-        logger.error(`Failed to import wallet: ${error.message}`);
-        res.status(500).json({ error: 'Failed to import wallet', details: error.message });
-      }
-    });
-
-    // GET /status
-    app.get('/status', (req, res) => {
-      if (!appContext.node || !appContext.wallet || !appContext.attestation) {
-        return res.status(503).json({ error: 'Node not fully initialized' });
-      }
-      const connections = appContext.node.libp2p.getConnections();
-      res.json({
-        nodePeerId: appContext.node.libp2p.peerId.toString(),
-        walletPeerId: appContext.wallet.peerId.toString(),
-        addresses: appContext.node.libp2p.getMultiaddrs().map(a => a.toString()),
-        activeConnections: connections.length,
-        peers: connections.map(c => c.remotePeer.toString()),
-        attestation: {
-          expiresAt: appContext.attestation.attestation.expiresAt,
-          nodePeerId: appContext.attestation.attestation.nodePeerId,
-        }
-      });
-    })
-
-    // GET /vectors
-    app.get('/vectors', (req, res) => {
-      res.json(VECTORS);
-    });
-
-    // GET /messages
-    app.get('/messages', (req, res) => {
-      res.json(appContext.receivedMessages)
-    })
-
-    // POST /publish
-    app.post('/publish', async (req, res) => {
-      const { type, payload } = req.body
-
-      if (!type || !payload) {
-        return res.status(400).json({ error: 'Missing type or payload' })
-      }
-
-      if (!appContext.node) {
-        return res.status(503).json({ error: 'Node not ready' });
-      }
-
-      try {
-        let transactionPayload
-        const { description, reference } = payload;
-
-        // A helper to get recipient PeerId from string
-        const getRecipientPeerId = (recipient) => {
-            if (!recipient) throw new Error('Recipient PeerId is required for this transaction type');
-            return peerIdFromString(recipient);
-        }
-
-        switch (type.toUpperCase()) {
-          case 'PAYMENT':
-            // Apply automatic bonus if eligible before creating the payment
-            await applyAutomaticBonus();
-            transactionPayload = createPaymentPayload(appContext.wallet, getRecipientPeerId(payload.to), payload.amount, payload.nonce, description, reference)
-            break
-          case 'VECTOR_TRANSACTION':
-            transactionPayload = await createVectorPayload(appContext.wallet, getRecipientPeerId(payload.to), payload.vectors, description, reference)
-            break
-          case 'SETRATERATIO':
-            transactionPayload = createSetRateRatioPayload(appContext.wallet, payload.rates, description, reference)
-            break
-          case 'SETDAILYBONUS':
-            transactionPayload = createSetDailyBonusPayload(appContext.wallet, payload.walletBalance, payload.dailyTransactionSum, description, reference)
-            break
-          case 'ASK_VALIDATION_ACCOUNT':
-            transactionPayload = createAskValidationAccountPayload(appContext.wallet, getRecipientPeerId(payload.to), description, reference)
-            break
-          case 'ACCOUNT_VALIDATION':
-            transactionPayload = createAccountValidationPayload(appContext.wallet, getRecipientPeerId(payload.to), description, reference)
-            break
-          case 'POLL_QUESTION':
-            transactionPayload = createPollQuestionPayload(appContext.wallet, payload.question, payload.pollType, payload.options, description, reference)
-            break
-          case 'POLL_ANSWER':
-            transactionPayload = createPollAnswerPayload(appContext.wallet, payload.pollId, payload.answer, description, reference)
-            break
-          case 'INFORMATION':
-            transactionPayload = createInformationPayload(appContext.wallet, payload.message, description, reference)
-            break
-          default:
-            return res.status(400).json({ error: `Unknown transaction type: ${type}` })
-        }
-
-        if (!transactionPayload) {
-            return res.status(400).json({ error: 'Transaction could not be created. Check payload or conditions (e.g., daily bonus).' });
-        }
-
-        // Build, sign, and publish the transaction
+        const registerPayload = createRegisterPayload(tempWallet, walletData.nullifier);
         const transactionToSign = {
           parents: appContext.dagHeads.map(cid => cid.toString()),
-          author: appContext.wallet.peerId.toString(),
+          author: tempWallet.peerId.toString(),
           timestamp: Date.now(),
-          type: type.toUpperCase(),
-          payload: transactionPayload
+          type: 'REGISTER',
+          payload: registerPayload
+        };
+        const signedTransaction = await signTransaction(transactionToSign, tempWallet.sign);
+        const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
+        if (!appContext.node) {
+          throw new Error('Cannot publish registration transaction: P2P node is not active.');
         }
-
-        const signedTransaction = await signTransaction(transactionToSign, appContext.wallet.sign)
-
-        const cid = await appContext.j.add(signedTransaction)
-        appContext.dagHeads = [...appContext.dagHeads, cid] // Optimistic update
-
-        const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction))
-        await appContext.node.libp2p.services.pubsub.publish('/invectis/global-ledger/1.0', messageBytes)
-
-        logger.info(`API: Published transaction of type ${type} with CID ${cid.toString()}`)
-        res.status(202).json({ message: 'Transaction published successfully', cid: cid.toString() })
-
-      } catch (error) {
-        logger.error(`API: Failed to publish transaction: ${error.message}`)
-        res.status(500).json({ error: 'Failed to publish transaction', details: error.message })
+        await appContext.node.libp2p.services.pubsub.publish('/invectis/global-ledger/1.0', messageBytes);
+        logger.prod(`✅ Published REGISTRATION transaction for ${tempWallet.peerId.toString()}`);
       }
-    })
+      const createdWalletForFrontend = {
+        ...walletData,
+        id: walletFileName,
+        name: name,
+        balance: {
+          main: 0,
+          vectors: Array(9).fill(0)
+        },
+        address: `addr...${walletFileName.slice(0, 8)}`
+      };
+      delete createdWalletForFrontend.privateKey;
+      res.status(201).json(createdWalletForFrontend);
+    } catch (error) {
+      logger.error(`Failed to create wallet: ${error.message}`);
+      res.status(500).json({
+        error: 'Failed to create wallet',
+        details: error.message
+      });
+    }
+  });
 
-    // Start server
-    const server = app.listen(PORT, () => {
-      logger.prod(`🚀 Server is running at http://localhost:${PORT}`);
+  // POST /wallets/import
+  app.post('/wallets/import', async (req, res) => {
+    const { name, walletData } = req.body;
+    if (!name || !walletData) {
+      return res.status(400).json({ error: 'Missing name or walletData' });
+    }
+    const dataDir = path.join(__dirname, 'data');
+    const safeName = name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
+    const filePath = path.join(dataDir, safeName);
+    try {
+      const parsedData = JSON.parse(walletData);
+      if (parsedData.version !== '1.0' || !parsedData.privateKey) {
+        throw new Error('Invalid wallet data format for import.');
+      }
+      await writeFile(filePath, JSON.stringify(parsedData, null, 2), 'utf8');
+      res.status(200).json({ message: 'Wallet imported successfully' });
+    } catch (error) {
+      logger.error(`Failed to import wallet: ${error.message}`);
+      res.status(500).json({ error: 'Failed to import wallet', details: error.message });
+    }
+  });
+
+  // POST /wallets/activate
+  app.post('/wallets/activate', async (req, res) => {
+    const { walletId } = req.body;
+    if (!walletId) {
+      return res.status(400).json({ error: 'walletId is required' });
+    }
+
+    if (appContext.node) {
+      logger.warn(`Attempted to activate a wallet while a node is already running.`);
+      return res.status(409).json({ error: 'A wallet is already active. Please restart the server to switch wallets.' });
+    }
+
+    try {
+      const dataDir = path.join(__dirname, 'data');
+      const walletFile = path.join(dataDir, walletId);
+      const datastorePath = path.join(dataDir, 'helia_server');
+
+      const wallet = await loadWalletFromFile(walletFile);
+      await startNode(wallet, datastorePath);
+
+      logger.prod(`✅ Wallet ${walletId} activated and P2P node started.`);
+      res.status(200).json({ message: `Wallet ${walletId} activated successfully.` });
+
+    } catch (error) {
+      logger.error(`Failed to activate wallet ${walletId}:`, error);
+      res.status(500).json({ error: `Failed to activate wallet ${walletId}`, details: error.message });
+    }
+  });
+
+  // GET /status
+  app.get('/status', (req, res) => {
+    if (!appContext.node || !appContext.wallet || !appContext.attestation) {
+      return res.status(200).json({ status: 'API_ONLY', message: 'Node not active. Create or activate a wallet.' });
+    }
+    const connections = appContext.node.libp2p.getConnections();
+    res.json({
+      status: 'ACTIVE',
+      nodePeerId: appContext.node.libp2p.peerId.toString(),
+      walletPeerId: appContext.wallet.peerId.toString(),
+      addresses: appContext.node.libp2p.getMultiaddrs().map(a => a.toString()),
+      activeConnections: connections.length,
+      peers: connections.map(c => c.remotePeer.toString()),
+      attestation: {
+        expiresAt: appContext.attestation.attestation.expiresAt,
+        nodePeerId: appContext.attestation.attestation.nodePeerId,
+      }
+    });
+  });
+
+  // GET /vectors
+  app.get('/vectors', (req, res) => {
+    res.json(VECTORS);
+  });
+
+  // GET /messages
+  app.get('/messages', (req, res) => {
+    res.json(appContext.receivedMessages);
+  });
+
+  // POST /publish
+  app.post('/publish', async (req, res) => {
+    const { type, payload } = req.body;
+    if (!type || !payload) {
+      return res.status(400).json({ error: 'Missing type or payload' });
+    }
+    if (!appContext.node) {
+      return res.status(503).json({ error: 'Node not ready. Activate a wallet first.' });
+    }
+    try {
+      let transactionPayload;
+      const { description, reference } = payload;
+      const getRecipientPeerId = (recipient) => {
+        if (!recipient) throw new Error('Recipient PeerId is required for this transaction type');
+        return peerIdFromString(recipient);
+      }
+      switch (type.toUpperCase()) {
+        case 'PAYMENT':
+          await applyAutomaticBonus();
+          transactionPayload = createPaymentPayload(appContext.wallet, getRecipientPeerId(payload.to), payload.amount, payload.nonce, description, reference);
+          break;
+        case 'VECTOR_TRANSACTION':
+          transactionPayload = await createVectorPayload(appContext.wallet, getRecipientPeerId(payload.to), payload.vectors, description, reference);
+          break;
+        case 'SETRATERATIO':
+          transactionPayload = createSetRateRatioPayload(appContext.wallet, payload.rates, description, reference);
+          break;
+        case 'SETDAILYBONUS':
+          transactionPayload = createSetDailyBonusPayload(appContext.wallet, payload.walletBalance, payload.dailyTransactionSum, description, reference);
+          break;
+        case 'ASK_VALIDATION_ACCOUNT':
+          transactionPayload = createAskValidationAccountPayload(appContext.wallet, getRecipientPeerId(payload.to), description, reference);
+          break;
+        case 'ACCOUNT_VALIDATION':
+          transactionPayload = createAccountValidationPayload(appContext.wallet, getRecipientPeerId(payload.to), description, reference);
+          break;
+        case 'POLL_QUESTION':
+          transactionPayload = createPollQuestionPayload(appContext.wallet, payload.question, payload.pollType, payload.options, description, reference);
+          break;
+        case 'POLL_ANSWER':
+          transactionPayload = createPollAnswerPayload(appContext.wallet, payload.pollId, payload.answer, description, reference);
+          break;
+        case 'INFORMATION':
+          transactionPayload = createInformationPayload(appContext.wallet, payload.message, description, reference);
+          break;
+        default:
+          return res.status(400).json({ error: `Unknown transaction type: ${type}` });
+      }
+      if (!transactionPayload) {
+        return res.status(400).json({ error: 'Transaction could not be created. Check payload or conditions (e.g., daily bonus).' });
+      }
+      const transactionToSign = {
+        parents: appContext.dagHeads.map(cid => cid.toString()),
+        author: appContext.wallet.peerId.toString(),
+        timestamp: Date.now(),
+        type: type.toUpperCase(),
+        payload: transactionPayload
+      };
+      const signedTransaction = await signTransaction(transactionToSign, appContext.wallet.sign);
+      const cid = await appContext.j.add(signedTransaction);
+      appContext.dagHeads = [...appContext.dagHeads, cid];
+      const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
+      await appContext.node.libp2p.services.pubsub.publish('/invectis/global-ledger/1.0', messageBytes);
+      logger.info(`API: Published transaction of type ${type} with CID ${cid.toString()}`);
+      res.status(202).json({ message: 'Transaction published successfully', cid: cid.toString() });
+    } catch (error) {
+      logger.error(`API: Failed to publish transaction: ${error.message}`);
+      res.status(500).json({ error: 'Failed to publish transaction', details: error.message });
+    }
+  });
+
+  // Start server
+  const server = app.listen(PORT, () => {
+    logger.prod(`🚀 Server is running at http://localhost:${PORT}`);
+    if (appContext.node) {
       logger.prod(`✅ Wallet loaded: ${walletFile}`);
-
-      // Find and log the recommended address for local connections
       const allAddresses = appContext.node.libp2p.getMultiaddrs().map(a => a.toString());
       const localWsAddress = allAddresses.find(a => a.includes('/ip4/127.0.0.1/') && a.includes('/ws'));
-
       if (localWsAddress) {
         logger.prod('------------------------------------------------------------------');
         logger.prod('To connect a local client, use this address:');
         logger.prod(localWsAddress);
         logger.prod('------------------------------------------------------------------');
       }
-    });
-
-    // Graceful shutdown
-    process.on('SIGINT', async () => {
-      logger.info('\nSIGINT received. Shutting down server and P2P node...')
-      server.close()
-      if (appContext.node) {
-        await appContext.node.stop()
-      }
-      process.exit(0)
-    })
-
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      logger.error(`Wallet file not found at ${walletFile}. Please create a wallet first by running the console mode: node index.js ${WALLET_FILE}`)
-    } else {
-      logger.error('Failed to start server:', error)
     }
-    process.exit(1)
-  }
+  });
+
+  // Graceful shutdown
+  process.on('SIGINT', async () => {
+    logger.info('\nSIGINT received. Shutting down server and P2P node...');
+    server.close();
+    if (appContext.node) {
+      await appContext.node.stop();
+    }
+    process.exit(0);
+  });
 }
 
 main()
