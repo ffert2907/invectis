@@ -29,20 +29,47 @@ const WALLET_FILE = process.env.WALLET_FILE || process.argv[2] || 'wallet.dat'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+const LAST_WALLET_FILE = path.join(__dirname, 'data', 'last_active_wallet.txt');
+
+async function saveLastActiveWallet(walletId) {
+  try {
+    await writeFile(LAST_WALLET_FILE, walletId, 'utf8');
+    logger.info(`Saved last active wallet: ${walletId}`);
+  } catch (error) {
+    logger.error(`Failed to save last active wallet: ${error.message}`);
+  }
+}
+
+async function getLastActiveWallet() {
+  try {
+    const walletId = await readFile(LAST_WALLET_FILE, 'utf8');
+    return walletId.trim();
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return null; // File doesn't exist, no last active wallet
+    }
+    logger.error(`Failed to read last active wallet: ${error.message}`);
+    return null;
+  }
+}
 
 async function main() {
   logger.prod('Starting in Server Mode...');
 
   const dataDir = path.join(__dirname, 'data');
-  const walletFile = path.join(dataDir, WALLET_FILE);
   const datastorePath = path.join(dataDir, 'helia_server');
   await mkdir(dataDir, { recursive: true });
 
-  // Try to load a default wallet and start the node at boot.
+  // Determine which wallet to load on startup
+  const lastActiveWallet = await getLastActiveWallet();
+  const walletToLoad = lastActiveWallet || WALLET_FILE;
+  const walletFile = path.join(dataDir, walletToLoad);
+
+  // Try to load the determined wallet and start the node at boot.
   try {
     const wallet = await loadWalletFromFile(walletFile);
     await startNode(wallet, datastorePath);
-    logger.prod(`✅ Default wallet ${WALLET_FILE} loaded and P2P node started.`);
+    logger.prod(`✅ Wallet ${walletToLoad} loaded and P2P node started.`);
   } catch (error) {
     if (error.code === 'ENOENT') {
       logger.warn(`Default wallet not found. Server is running in API-only mode.`);
@@ -153,6 +180,7 @@ async function main() {
         const datastorePath = path.join(dataDir, 'helia_server');
         const walletToActivate = await loadWalletFromFile(filePath);
         await startNode(walletToActivate, datastorePath);
+        await saveLastActiveWallet(walletFileName); // Save the new wallet as the last active one
         logger.prod(`✅ Wallet ${walletFileName} activated and P2P node started.`);
       }
 
@@ -243,6 +271,7 @@ async function main() {
 
       const wallet = await loadWalletFromFile(walletFile);
       await startNode(wallet, datastorePath);
+      await saveLastActiveWallet(walletId); // Save the activated wallet as the last active one
 
       logger.prod(`✅ Wallet ${walletId} activated and P2P node started.`);
       res.status(200).json({ message: `Wallet ${walletId} activated successfully.` });
