@@ -2,6 +2,8 @@ import { readFile, writeFile } from 'fs/promises';
 import { logger } from './config.js';
 import { generateNullifier } from './identity.js';
 import { peerIdFromPrivateKey } from '@libp2p/peer-id';
+import { randomUUID } from 'crypto';
+import { TextEncoder } from 'util';
 
 /**
  * Loads a wallet from a file.
@@ -159,4 +161,57 @@ export async function createWallet(filePath, {
     peerId,
     ...walletData // The rest of the wallet metadata
   };
+}
+
+/**
+ * Creates a canonical string representation of a JSON object.
+ * Keys are sorted alphabetically to ensure a consistent output.
+ * @param {object} object - The object to canonicalize.
+ * @returns {string} - A deterministic string representation of the object.
+ */
+function canonicalize(object) {
+    const sortedObject = {};
+    Object.keys(object).sort().forEach(key => {
+        sortedObject[key] = object[key];
+    });
+    return JSON.stringify(sortedObject);
+}
+
+
+/**
+ * Creates and signs an attestation that binds a wallet's identity to a node's PeerID.
+ * This allows a node to prove it has permission to act on behalf of a wallet for a limited time.
+ *
+ * @param {import('@libp2p/interface-keys').PrivateKey} walletPrivateKey - The wallet's private key object.
+ * @param {import('@libp2p/interface-peer-id').PeerId} walletPeerId - The wallet's full PeerId object.
+ * @param {import('@libp2p/interface-peer-id').PeerId} nodePeerId - The PeerID of the node that will use this attestation.
+ * @param {number} [ttlSeconds=600] - The time-to-live for the attestation in seconds. Defaults to 10 minutes.
+ * @returns {Promise<{attestation: object, signature: string}>} The attestation object and its base64-encoded signature.
+ */
+export async function signAttestation(walletPrivateKey, walletPeerId, nodePeerId, ttlSeconds = 600) {
+    const issuedAt = new Date();
+    const expiresAt = new Date(issuedAt.getTime() + ttlSeconds * 1000);
+
+    const attestation = {
+        type: 'wallet-node-attestation',
+        version: '1',
+        walletPeerId: walletPeerId.toString(),
+        walletPubKey: Buffer.from(walletPrivateKey.publicKey.raw).toString('base64'),
+        nodePeerId: nodePeerId.toString(),
+        issuedAt: issuedAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        nonce: randomUUID(),
+        capabilities: ['relay', 'indexing'] // Example capabilities from design
+    };
+
+    const payloadToSign = canonicalize(attestation);
+    const signatureBytes = await walletPrivateKey.sign(new TextEncoder().encode(payloadToSign));
+    const signature = Buffer.from(signatureBytes).toString('base64');
+
+    logger.info(`✅ Attestation signed for Node ${nodePeerId.toString()}`);
+
+    return {
+        attestation,
+        signature
+    };
 }

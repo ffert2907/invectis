@@ -8,18 +8,31 @@ import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { createHelia } from 'helia'
 import { MemoryDatastore } from 'datastore-core'
 import path from 'path'
+import { keys } from '@libp2p/crypto'
+import { peerIdFromPrivateKey } from '@libp2p/peer-id'
+import { pipe } from 'it-pipe'
+import { fromString as uint8ArrayFromString } from 'uint8arrays/from-string'
+import { logger } from './config.js'
 
 /**
- * Crée et configure un nœud P2P avec Helia et support WebSockets
- * @param {import('@libp2p/interface-peer-id').PeerId} peerId - L'identité du noeud
- * @param {string} datastorePath - Le chemin vers le répertoire de la base de données locale
- * @returns {Promise<Helia>} - Instance Helia configurée
+ * Creates and configures a P2P node with Helia, WebSockets support, and a decoupled identity.
+ * The node generates its own ephemeral PeerID and exposes a method to serve a wallet-signed attestation.
+ * @param {string} datastorePath - The path to the local database directory.
+ * @returns {Promise<import('helia').Helia & { setAttestation: (attestation: object) => void, privateKey: import('@libp2p/interface-keys').PrivateKey }>} - A configured Helia instance with additional properties.
  */
-export async function createNode(peerId, datastorePath) {
-  // Configure la base de données locale pour le stockage
+export async function createNode(datastorePath) {
+  // This variable will hold the signed attestation and is captured in the handler's closure.
+  let currentAttestation = null;
+
+  // 1. Generate an ephemeral identity for this node session.
+  const nodeKey = await keys.generateKeyPair('Ed25519');
+  const peerId = await peerIdFromPrivateKey(nodeKey);
+  logger.info(`P2P: Generated ephemeral node PeerId: ${peerId.toString()}`);
+
+  // Configure the local database for storage
   const datastore = new MemoryDatastore()
 
-  // Configuration de libp2p avec WebSockets
+  // Configure libp2p with WebSockets
   const libp2pConfig = {
     peerId,
     addresses: {
@@ -42,7 +55,6 @@ export async function createNode(peerId, datastorePath) {
           return new TextEncoder().encode(msg.topic + msg.data)
         },
         emitSelf: false,
-        // Ajout de logs pour gossipsub
         debugName: 'gossipsub-debug'
       })
     },
@@ -52,7 +64,6 @@ export async function createNode(peerId, datastorePath) {
     connectionManager: {
       minConnections: 0,
       maxConnections: 100,
-      // Délais plus longs pour le debug
       dialTimeout: 30000,
       inboundUpgradeTimeout: 30000
     }
@@ -60,15 +71,40 @@ export async function createNode(peerId, datastorePath) {
 
   const libp2p = await createLibp2p(libp2pConfig)
 
-  // Création de l'instance Helia à partir de libp2p
+  // 2. Set up the attestation protocol handler
+  await libp2p.handle('/app/attest/1.0.0', ({ stream }) => {
+    if (currentAttestation) {
+      logger.info(`P2P: Serving attestation to requesting peer.`);
+      pipe(
+        [uint8ArrayFromString(JSON.stringify(currentAttestation))],
+        stream.sink
+      ).catch(err => {
+        logger.error('P2P: Error piping attestation to stream:', err);
+      });
+    } else {
+      logger.warn('P2P: No attestation available to serve, closing stream.');
+      stream.close();
+    }
+  });
+
+  // Create the Helia instance from libp2p
   const helia = await createHelia({
     libp2p,
     datastore,
-    // Configuration additionnelle pour Helia
-    start: false // On démarre manuellement
+    start: false // We will start it manually
   })
 
-  return helia
+  // 3. Add a method to the Helia instance to update the attestation post-creation
+  helia.setAttestation = (newAttestation) => {
+    logger.info('P2P: Node attestation has been received and is now available.');
+    currentAttestation = newAttestation;
+  };
+
+  // Attach the node's private key to the returned instance.
+  // This is useful if the key needs to be persisted.
+  helia.privateKey = nodeKey;
+
+  return helia;
 }
 
 
