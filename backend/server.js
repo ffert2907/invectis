@@ -225,16 +225,21 @@ async function main() {
 
     // GET /status
     app.get('/status', (req, res) => {
-      if (!appContext.node || !appContext.wallet.peerId) {
-        return res.status(503).json({ error: 'Node not ready' })
+      if (!appContext.node || !appContext.wallet || !appContext.attestation) {
+        return res.status(503).json({ error: 'Node not fully initialized' });
       }
-      const connections = appContext.node.libp2p.getConnections()
+      const connections = appContext.node.libp2p.getConnections();
       res.json({
-        peerId: appContext.wallet.peerId.toString(),
+        nodePeerId: appContext.node.libp2p.peerId.toString(),
+        walletPeerId: appContext.wallet.peerId.toString(),
         addresses: appContext.node.libp2p.getMultiaddrs().map(a => a.toString()),
         activeConnections: connections.length,
-        peers: connections.map(c => c.remotePeer.toString())
-      })
+        peers: connections.map(c => c.remotePeer.toString()),
+        attestation: {
+          expiresAt: appContext.attestation.attestation.expiresAt,
+          nodePeerId: appContext.attestation.attestation.nodePeerId,
+        }
+      });
     })
 
     // GET /vectors

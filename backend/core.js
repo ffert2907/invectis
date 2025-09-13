@@ -1,4 +1,5 @@
 import { createNode } from './p2p.js'
+import { signAttestation } from './wallet.js'
 import { verifyTransaction } from './transaction.js'
 import { calculateBalance, getNonce, hasReceivedBonusToday, calculateDailyTransactionSum } from './ledger.js'
 import { formatTransactionForFrontend } from './api.js'
@@ -15,6 +16,7 @@ const GLOBAL_LEDGER_TOPIC = '/invectis/global-ledger/1.0'
 export const appContext = {
   node: null,
   wallet: null,
+  attestation: null, // To store the current wallet-node attestation
   j: null,
   dagHeads: [],
   receivedMessages: [],
@@ -28,29 +30,38 @@ export const appContext = {
  * @returns {Promise<void>}
  */
 export async function startNode(wallet, datastorePath) {
-  logger.info('Core: Initializing P2P node...')
+  logger.info('Core: Initializing P2P node with decoupled identity...');
 
-  // 1. Store wallet and create the P2P node
-  appContext.wallet = wallet
-  const node = await createNode(wallet.peerId, datastorePath)
-  appContext.node = node
-  appContext.j = json(node)
+  // 1. Create the P2P node. It will generate its own ephemeral PeerID.
+  const node = await createNode(datastorePath);
+  appContext.node = node;
+  appContext.wallet = wallet;
+  appContext.j = json(node);
 
-  // 2. Augment wallet object with node-derived info
-  // The peerId is already in the wallet object from wallet.js
-  appContext.wallet.sign = (data) => wallet.privateKey.sign(data)
+  // 2. Create a wallet-signed attestation for the node's PeerID.
+  const nodePeerId = node.libp2p.peerId;
+  const signedAttestation = await signAttestation(wallet.privateKey, wallet.peerId, nodePeerId);
 
-  logger.info(`Core: Identity: ${appContext.wallet.peerId.toString()}`)
+  // 3. Provide the attestation to the node so it can be served to peers.
+  node.setAttestation(signedAttestation);
+  appContext.attestation = signedAttestation;
 
-  // 3. Start the node
-  await node.start()
-  logger.prod('Core: Node started successfully')
+  // 4. Augment wallet object with a signing function for convenience.
+  appContext.wallet.sign = (data) => wallet.privateKey.sign(data);
 
-  // 4. Subscribe to the global topic
-  await node.libp2p.services.pubsub.subscribe(GLOBAL_LEDGER_TOPIC)
-  logger.prod(`Core: Subscribed to topic: ${GLOBAL_LEDGER_TOPIC}`)
+  logger.prod(`Core: Wallet ID: ${wallet.peerId.toString()}`);
+  logger.prod(`Core: Node ID:   ${nodePeerId.toString()}`);
+  logger.info('Core: Attestation created and set.');
 
-  // 5. Set up message listener
+  // 5. Start the node
+  await node.start();
+  logger.prod('Core: Node started successfully');
+
+  // 6. Subscribe to the global topic
+  await node.libp2p.services.pubsub.subscribe(GLOBAL_LEDGER_TOPIC);
+  logger.prod(`Core: Subscribed to topic: ${GLOBAL_LEDGER_TOPIC}`);
+
+  // 7. Set up message listener
   node.libp2p.services.pubsub.addEventListener('message', async (event) => {
     if (event.detail.topic !== GLOBAL_LEDGER_TOPIC) return
 
