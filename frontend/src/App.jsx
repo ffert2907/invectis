@@ -77,7 +77,24 @@ function App() {
   };
 
   useEffect(() => {
-    fetchWallets();
+    const initialFetch = async () => {
+      try {
+        const response = await fetch('http://localhost:3000/wallets');
+        if (response.ok) {
+          const fetchedWallets = await response.json();
+          setWallets(fetchedWallets);
+          if (fetchedWallets.length === 0) {
+            setCurrentView('wallets');
+          }
+        } else {
+          console.error('Failed to fetch wallets');
+        }
+      } catch (error) {
+        console.error('Error fetching wallets:', error);
+      }
+    };
+    initialFetch();
+
     const interval = setInterval(async () => {
       try {
         const response = await fetch('http://localhost:3000/status');

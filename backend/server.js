@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import { mkdir, readdir, readFile, writeFile } from 'fs/promises'
 import { logger } from './config.js'
 import { loadWalletFromFile, createWallet } from './wallet.js'
-import { startNode, appContext, applyAutomaticBonus } from './core.js'
+import { startNode, appContext, applyAutomaticBonus, startTransactionQueueProcessor } from './core.js'
 import { VECTORS } from './vectors.js'
 import {
   signTransaction,
@@ -29,20 +29,47 @@ const WALLET_FILE = process.env.WALLET_FILE || process.argv[2] || 'wallet.dat'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+const LAST_WALLET_FILE = path.join(__dirname, 'data', 'last_active_wallet.txt');
+
+async function saveLastActiveWallet(walletId) {
+  try {
+    await writeFile(LAST_WALLET_FILE, walletId, 'utf8');
+    logger.info(`Saved last active wallet: ${walletId}`);
+  } catch (error) {
+    logger.error(`Failed to save last active wallet: ${error.message}`);
+  }
+}
+
+async function getLastActiveWallet() {
+  try {
+    const walletId = await readFile(LAST_WALLET_FILE, 'utf8');
+    return walletId.trim();
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return null; // File doesn't exist, no last active wallet
+    }
+    logger.error(`Failed to read last active wallet: ${error.message}`);
+    return null;
+  }
+}
 
 async function main() {
   logger.prod('Starting in Server Mode...');
 
   const dataDir = path.join(__dirname, 'data');
-  const walletFile = path.join(dataDir, WALLET_FILE);
   const datastorePath = path.join(dataDir, 'helia_server');
   await mkdir(dataDir, { recursive: true });
 
-  // Try to load a default wallet and start the node at boot.
+  // Determine which wallet to load on startup
+  const lastActiveWallet = await getLastActiveWallet();
+  const walletToLoad = lastActiveWallet || WALLET_FILE;
+  const walletFile = path.join(dataDir, walletToLoad);
+
+  // Try to load the determined wallet and start the node at boot.
   try {
     const wallet = await loadWalletFromFile(walletFile);
     await startNode(wallet, datastorePath);
-    logger.prod(`✅ Default wallet ${WALLET_FILE} loaded and P2P node started.`);
+    logger.prod(`✅ Wallet ${walletToLoad} loaded and P2P node started.`);
   } catch (error) {
     if (error.code === 'ENOENT') {
       logger.warn(`Default wallet not found. Server is running in API-only mode.`);
@@ -58,6 +85,9 @@ async function main() {
   const app = express();
   app.use(cors());
   app.use(express.json());
+
+  // Start the background queue processor
+  startTransactionQueueProcessor();
 
   // --- API Routes ---
 
@@ -143,8 +173,20 @@ async function main() {
         privateKey,
         ...walletData
       } = await createWallet(filePath, walletDetails);
+
+      // If no node is active, activate it with the new wallet.
+      if (!appContext.node) {
+        logger.info('No active P2P node found. Activating node with new wallet...');
+        const datastorePath = path.join(dataDir, 'helia_server');
+        const walletToActivate = await loadWalletFromFile(filePath);
+        await startNode(walletToActivate, datastorePath);
+        await saveLastActiveWallet(walletFileName); // Save the new wallet as the last active one
+        logger.prod(`✅ Wallet ${walletFileName} activated and P2P node started.`);
+      }
+
+      // For individual accounts, queue a registration transaction to be published.
       if (walletData.accountType === 'individual' && walletData.nullifier) {
-        logger.info(`Individual wallet created, proceeding with registration transaction for nullifier: ${walletData.nullifier}`);
+        logger.info(`Queueing REGISTRATION transaction for ${walletData.peerId.toString()}`);
         const peerId = await peerIdFromPrivateKey(privateKey);
         const tempWallet = {
           peerId,
@@ -152,6 +194,7 @@ async function main() {
           sign: (data) => privateKey.sign(data),
           accountType: walletData.accountType
         };
+
         const registerPayload = createRegisterPayload(tempWallet, walletData.nullifier);
         const transactionToSign = {
           parents: appContext.dagHeads.map(cid => cid.toString()),
@@ -161,12 +204,10 @@ async function main() {
           payload: registerPayload
         };
         const signedTransaction = await signTransaction(transactionToSign, tempWallet.sign);
-        const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
-        if (!appContext.node) {
-          throw new Error('Cannot publish registration transaction: P2P node is not active.');
-        }
-        await appContext.node.libp2p.services.pubsub.publish('/invectis/global-ledger/1.0', messageBytes);
-        logger.prod(`✅ Published REGISTRATION transaction for ${tempWallet.peerId.toString()}`);
+
+        // Add the transaction to the queue instead of publishing directly.
+        appContext.publishQueue.push(signedTransaction);
+        logger.info(`✅ REGISTRATION transaction for ${tempWallet.peerId.toString()} added to the queue.`);
       }
       const createdWalletForFrontend = {
         ...walletData,
@@ -230,6 +271,7 @@ async function main() {
 
       const wallet = await loadWalletFromFile(walletFile);
       await startNode(wallet, datastorePath);
+      await saveLastActiveWallet(walletId); // Save the activated wallet as the last active one
 
       logger.prod(`✅ Wallet ${walletId} activated and P2P node started.`);
       res.status(200).json({ message: `Wallet ${walletId} activated successfully.` });
