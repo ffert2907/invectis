@@ -21,6 +21,7 @@ export const appContext = {
   dagHeads: [],
   receivedMessages: [],
   nullifiers: new Set(), // A set to store registered nullifiers
+  publishQueue: [], // A queue for transactions that need to be published
 }
 
 /**
@@ -189,4 +190,54 @@ export async function applyAutomaticBonus(deps = {}) {
   } else {
     logger.info('User has already received a daily bonus today.');
   }
+}
+
+/**
+ * Starts a background process to handle publishing transactions from a queue.
+ * This ensures that transactions (like registrations) are only sent when the
+ * node is connected to peers.
+ */
+export function startTransactionQueueProcessor() {
+  const anHour = 3600 * 1000;
+  const interval = setInterval(async () => {
+    // If the queue is empty or the node isn't ready, do nothing.
+    if (appContext.publishQueue.length === 0 || !appContext.node) {
+      return;
+    }
+
+    // Check for peers on the global topic
+    const peers = appContext.node.libp2p.services.pubsub.getPeers(GLOBAL_LEDGER_TOPIC);
+    if (peers.length === 0) {
+      logger.debug('Queue: No peers found yet. Waiting for next interval.');
+      return;
+    }
+
+    logger.info(`Queue: Found ${peers.length} peer(s). Processing transaction queue...`);
+
+    // Get the next transaction to publish
+    const signedTransaction = appContext.publishQueue[0]; // Peek at the first item
+
+    // Check if the transaction is too old (e.g., > 1 hour)
+    const transactionAge = Date.now() - signedTransaction.timestamp;
+    if (transactionAge > anHour) {
+      logger.warn(`Queue: Discarding expired transaction from author ${signedTransaction.author}`);
+      appContext.publishQueue.shift(); // Remove the expired transaction
+      return;
+    }
+
+    try {
+      const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
+      await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, messageBytes);
+      logger.prod(`Queue: Successfully published transaction of type ${signedTransaction.type} for ${signedTransaction.author}`);
+      appContext.publishQueue.shift(); // Remove the successfully published transaction
+    } catch (error) {
+      logger.error(`Queue: Failed to publish transaction: ${error.message}. Will retry.`);
+      // We don't remove the transaction, so it will be retried on the next interval.
+    }
+  }, 5000); // Check the queue every 5 seconds
+
+  logger.info('✅ Transaction queue processor started.');
+
+  // Note: In a real production app, you'd want a way to stop this interval on shutdown.
+  // For this example, it will run until the process exits.
 }
