@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import { mkdir, readdir, readFile, writeFile } from 'fs/promises'
 import { logger } from './config.js'
 import { loadWalletFromFile, createWallet } from './wallet.js'
-import { startNode, appContext, applyAutomaticBonus, startTransactionQueueProcessor } from './core.js'
+import { startNode, appContext, applyAutomaticBonus, startTransactionQueueProcessor, createAndSetAttestation } from './core.js'
 import { VECTORS } from './vectors.js'
 import {
   signTransaction,
@@ -259,21 +259,33 @@ async function main() {
       return res.status(400).json({ error: 'walletId is required' });
     }
 
-    if (appContext.node) {
-      logger.warn(`Attempted to activate a wallet while a node is already running.`);
-      return res.status(409).json({ error: 'A wallet is already active. Please restart the server to switch wallets.' });
-    }
+    const dataDir = path.join(__dirname, 'data');
+    const walletFile = path.join(dataDir, walletId);
 
     try {
-      const dataDir = path.join(__dirname, 'data');
-      const walletFile = path.join(dataDir, walletId);
-      const datastorePath = path.join(dataDir, 'helia_server');
+      // Load the new wallet from file
+      const newWallet = await loadWalletFromFile(walletFile);
 
-      const wallet = await loadWalletFromFile(walletFile);
-      await startNode(wallet, datastorePath);
-      await saveLastActiveWallet(walletId); // Save the activated wallet as the last active one
+      // Case 1: Node is not running yet. Start it with the selected wallet.
+      if (!appContext.node) {
+        logger.info(`No active node found. Starting node with wallet: ${walletId}`);
+        const datastorePath = path.join(dataDir, 'helia_server');
+        await startNode(newWallet, datastorePath);
+        logger.prod(`✅ Wallet ${walletId} activated and P2P node started.`);
+      }
+      // Case 2: Node is already running. Hot-swap the wallet.
+      else {
+        logger.info(`Node is running. Hot-swapping wallet to: ${walletId}`);
+        // 1. Update wallet in context
+        appContext.wallet = newWallet;
+        // 2. Re-create and set the attestation for the new wallet
+        appContext.attestation = await createAndSetAttestation(appContext.node, newWallet);
+        logger.prod(`✅ Wallet switched to ${walletId} on running node.`);
+      }
 
-      logger.prod(`✅ Wallet ${walletId} activated and P2P node started.`);
+      // In both cases, save the activated wallet as the last active one
+      await saveLastActiveWallet(walletId);
+
       res.status(200).json({ message: `Wallet ${walletId} activated successfully.` });
 
     } catch (error) {

@@ -30,6 +30,22 @@ export const appContext = {
  * @param {string} datastorePath - The path for the Helia datastore.
  * @returns {Promise<void>}
  */
+/**
+ * Creates an attestation signing the node's PeerId with the wallet's private key
+ * and sets it on the node.
+ * @param {object} node - The Helia node instance.
+ * @param {object} wallet - The wallet object.
+ * @returns {Promise<object>} The signed attestation object.
+ */
+export async function createAndSetAttestation(node, wallet) {
+  logger.info('Core: Creating and setting new attestation...');
+  const nodePeerId = node.libp2p.peerId;
+  const signedAttestation = await signAttestation(wallet.privateKey, wallet.peerId, nodePeerId);
+  node.setAttestation(signedAttestation);
+  logger.info('Core: New attestation has been set on the running node.');
+  return signedAttestation;
+}
+
 export async function startNode(wallet, datastorePath) {
   logger.info('Core: Initializing P2P node with decoupled identity...');
 
@@ -39,17 +55,13 @@ export async function startNode(wallet, datastorePath) {
   appContext.wallet = wallet;
   appContext.j = json(node);
 
-  // 2. Create a wallet-signed attestation for the node's PeerID.
-  const nodePeerId = node.libp2p.peerId;
-  const signedAttestation = await signAttestation(wallet.privateKey, wallet.peerId, nodePeerId);
-
-  // 3. Provide the attestation to the node so it can be served to peers.
-  node.setAttestation(signedAttestation);
-  appContext.attestation = signedAttestation;
+  // 2. Create and set the initial attestation.
+  appContext.attestation = await createAndSetAttestation(node, wallet);
 
   // 4. Augment wallet object with a signing function for convenience.
   appContext.wallet.sign = (data) => wallet.privateKey.sign(data);
 
+  const nodePeerId = node.libp2p.peerId;
   logger.prod(`Core: Wallet ID: ${wallet.peerId.toString()}`);
   logger.prod(`Core: Node ID:   ${nodePeerId.toString()}`);
   logger.info('Core: Attestation created and set.');
