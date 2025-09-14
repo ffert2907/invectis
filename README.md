@@ -1,5 +1,8 @@
 # invectis
-p2p earth ressources tr
+p2p earth ressources transsaction
+
+fichier décentralisé IPFS (Helia) - Graphe Orienté Acyclique (DAG).
+
 
 ### Launch nodes :
 ```node index.js wallet1.dat```
