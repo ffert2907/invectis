@@ -23,7 +23,6 @@ function App() {
   const [vectors, setVectors] = useState([]);
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedWallet, setSelectedWallet] = useState(0);
-  const [principalWalletId, setPrincipalWalletId] = useState(null);
   const [newWallet, setNewWallet] = useState({
     name: '',
     givenName: '',
@@ -100,9 +99,18 @@ function App() {
         const response = await fetch('http://localhost:3000/status');
         if (response.ok) {
           const newStatus = await response.json();
-          setStatus(newStatus);
+          if (newStatus.status === 'ACTIVE') {
+            setStatus({
+              ...newStatus,
+              peerId: newStatus.nodePeerId, // Correctly map nodePeerId
+              connections: newStatus.activeConnections,
+            });
+          } else {
+            setStatus({ peerId: '', connections: 0 });
+          }
         } else {
           console.error('Failed to fetch status');
+          setStatus({ peerId: '', connections: 0 });
         }
       } catch (error) {
         console.error('Error fetching status:', error);
@@ -126,26 +134,13 @@ function App() {
   }, [wallets, selectedWallet]);
 
   useEffect(() => {
-    const storedPrincipalWalletId = localStorage.getItem('principalWalletId');
-    if (storedPrincipalWalletId) {
-      setPrincipalWalletId(JSON.parse(storedPrincipalWalletId));
-    }
-  }, []);
-
-  useEffect(() => {
-    if (principalWalletId) {
-      localStorage.setItem('principalWalletId', JSON.stringify(principalWalletId));
-    }
-  }, [principalWalletId]);
-
-  useEffect(() => {
-    if (principalWalletId) {
-      const walletIndex = wallets.findIndex(wallet => wallet.id === principalWalletId);
-      if (walletIndex !== -1) {
-        setSelectedWallet(walletIndex);
+    if (status.walletPeerId && wallets.length > 0) {
+      const activeWalletIndex = wallets.findIndex(w => w.address === status.walletPeerId);
+      if (activeWalletIndex !== -1) {
+        setSelectedWallet(activeWalletIndex);
       }
     }
-  }, [principalWalletId, wallets]);
+  }, [status.walletPeerId, wallets]);
 
   const fetchTransactions = async (peerId) => {
     if (!peerId) {
@@ -349,6 +344,42 @@ function App() {
     </div>
   );
 
+  const handleWalletSelection = async (walletId) => {
+    try {
+      const response = await fetch('http://localhost:3000/wallets/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletId }),
+      });
+
+      if (response.ok) {
+        // The backend is now active with the new wallet.
+        // The polling /status check will update the UI to show the correct
+        // active wallet and peer ID automatically.
+        setCurrentView('dashboard');
+        // Manually trigger a wallet and status fetch to speed up UI update
+        fetchWallets();
+        const statusRes = await fetch('http://localhost:3000/status');
+        if (statusRes.ok) {
+          const newStatus = await statusRes.json();
+           if (newStatus.status === 'ACTIVE') {
+            setStatus({
+              ...newStatus,
+              peerId: newStatus.nodePeerId,
+              connections: newStatus.activeConnections,
+            });
+          }
+        }
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to activate wallet: ${errorData.details || response.statusText}`);
+      }
+    } catch (error) {
+      console.error('Error activating wallet:', error);
+      alert('Error activating wallet');
+    }
+  };
+
   const renderWallets = () => (
     <div className="flex flex-col h-full bg-gray-900">
       <div className="bg-gradient-to-r from-green-900 to-green-800 p-6 rounded-b-3xl">
@@ -361,10 +392,7 @@ function App() {
           {wallets.map((wallet, index) => (
             <div
               key={wallet.id}
-              onClick={() => {
-                setSelectedWallet(index);
-                setCurrentView('dashboard');
-              }}
+              onClick={() => handleWalletSelection(wallet.id)}
               className={`bg-gray-800 rounded-2xl p-4 cursor-pointer transition-all ${selectedWallet === index ? 'ring-2 ring-amber-400' : ''}`}
             >
               <div className="flex items-center justify-between">
@@ -378,9 +406,6 @@ function App() {
                     <p className="text-green-400 font-medium">{wallet.balance.main.toFixed(2)} IVT-h</p>
                   </div>
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); setPrincipalWalletId(wallet.id); }} className="p-2 -m-2">
-                  <Star className={`w-5 h-5 ${principalWalletId === wallet.id ? 'text-yellow-400 fill-current' : 'text-gray-600'}`} />
-                </button>
                 <ChevronRight className="w-5 h-5 text-gray-400" />
               </div>
             </div>
