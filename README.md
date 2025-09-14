@@ -47,3 +47,35 @@ cd frontend
 bash build.sh
 
 This will update your Android project with the latest changes from your web app. After running the script, you can go back to Android Studio and run the app on your device again.
+
+
+# TODO
+### 1 - cold transaction (not real time transaction peerID and WalletID not yet connected : example website payment or asynchone transaction)
+"if a counterpart scan my node peerID now and create a new transaction tomorrow then it will go in the wrong wallet if i change between this time ?"
+In the system's current design, the transaction would not go to the wrong wallet. Instead, the transaction would likely fail to send.
+
+Here’s the reason why:
+
+The Node PeerID, which is what your counterpart gets from the QR code to establish a connection, is temporary or "ephemeral". A new Node PeerID is generated every time your application starts the P2P node.
+
+So, in your scenario:
+
+    - Today: Your counterpart scans the QR code and saves the address of your temporary node (let's call it Node_A).
+    - Tomorrow: You restart your app with a different wallet. Your application now has a new temporary node (Node_B). The old Node_A no longer exists on the network.
+    - When your counterpart tries to send the transaction, their application will try to connect to the old, non-existent Node_A. The connection will time out, and the transaction will fail.
+
+You have highlighted a key design consideration for this application. While this behavior is "safe" because it prevents funds from going to the wrong wallet, it is not ideal for the user experience, as connection details can become invalid after a restart.
+
+A more advanced version of this system might use your permanent Wallet ID as your main address and then use a discovery service on the network to find which temporary Node ID is currently active for that wallet. For now, the connection would need to be re-established by scanning a new QR code.
+
+### 2 - persistant datastore for the ledger
+
+### 3 - internet relay node 
+    - discover all the internet relay to populate node list
+    - populate SETRate transaction
+    - spread informations
+    - 
+
+    
+
+
