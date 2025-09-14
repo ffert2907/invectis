@@ -23,7 +23,6 @@ function App() {
   const [vectors, setVectors] = useState([]);
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedWallet, setSelectedWallet] = useState(0);
-  const [principalWalletId, setPrincipalWalletId] = useState(null);
   const [newWallet, setNewWallet] = useState({
     name: '',
     givenName: '',
@@ -100,9 +99,18 @@ function App() {
         const response = await fetch('http://localhost:3000/status');
         if (response.ok) {
           const newStatus = await response.json();
-          setStatus(newStatus);
+          if (newStatus.status === 'ACTIVE') {
+            setStatus({
+              ...newStatus,
+              peerId: newStatus.nodePeerId, // Correctly map nodePeerId
+              connections: newStatus.activeConnections,
+            });
+          } else {
+            setStatus({ peerId: '', connections: 0 });
+          }
         } else {
           console.error('Failed to fetch status');
+          setStatus({ peerId: '', connections: 0 });
         }
       } catch (error) {
         console.error('Error fetching status:', error);
@@ -126,26 +134,13 @@ function App() {
   }, [wallets, selectedWallet]);
 
   useEffect(() => {
-    const storedPrincipalWalletId = localStorage.getItem('principalWalletId');
-    if (storedPrincipalWalletId) {
-      setPrincipalWalletId(JSON.parse(storedPrincipalWalletId));
-    }
-  }, []);
-
-  useEffect(() => {
-    if (principalWalletId) {
-      localStorage.setItem('principalWalletId', JSON.stringify(principalWalletId));
-    }
-  }, [principalWalletId]);
-
-  useEffect(() => {
-    if (principalWalletId) {
-      const walletIndex = wallets.findIndex(wallet => wallet.id === principalWalletId);
-      if (walletIndex !== -1) {
-        setSelectedWallet(walletIndex);
+    if (status.walletPeerId && wallets.length > 0) {
+      const activeWalletIndex = wallets.findIndex(w => w.address === status.walletPeerId);
+      if (activeWalletIndex !== -1) {
+        setSelectedWallet(activeWalletIndex);
       }
     }
-  }, [principalWalletId, wallets]);
+  }, [status.walletPeerId, wallets]);
 
   const fetchTransactions = async (peerId) => {
     if (!peerId) {
@@ -378,9 +373,6 @@ function App() {
                     <p className="text-green-400 font-medium">{wallet.balance.main.toFixed(2)} IVT-h</p>
                   </div>
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); setPrincipalWalletId(wallet.id); }} className="p-2 -m-2">
-                  <Star className={`w-5 h-5 ${principalWalletId === wallet.id ? 'text-yellow-400 fill-current' : 'text-gray-600'}`} />
-                </button>
                 <ChevronRight className="w-5 h-5 text-gray-400" />
               </div>
             </div>

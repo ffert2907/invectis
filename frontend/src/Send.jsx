@@ -17,13 +17,13 @@ const Send = ({ recipientId, setRecipientId, setCurrentView, currentView }) => {
 
     scannerRef.current = scanner;
 
-    const onScanSuccess = (decodedText, decodedResult) => {
+    const onScanSuccess = (decodedText) => {
       setRecipientId(decodedText);
       // maybe need to delete this next line ?
       scanner.clear();
     };
 
-    const onScanFailure = (error) => {
+    const onScanFailure = () => {
       // console.warn(`Code scan error = ${error}`);
     };
 
@@ -38,7 +38,7 @@ const Send = ({ recipientId, setRecipientId, setCurrentView, currentView }) => {
         scannerRef.current = null;
       }
     };
-  }, [currentView]);
+  }, [currentView, setRecipientId]);
 
   useEffect(() => {
     if (recipientId && scannerRef.current) {
