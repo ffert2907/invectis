@@ -72,7 +72,8 @@ async function main() {
     logger.prod(`✅ Wallet ${walletToLoad} loaded and P2P node started.`);
   } catch (error) {
     if (error.code === 'ENOENT') {
-      logger.warn(`Default wallet not found. Server is running in API-only mode.`);
+      logger.warn(`Wallet file not found at: ${walletFile}`);
+      logger.warn(`Server is running in API-only mode.`);
       logger.warn('Create or activate a wallet via the API to start the P2P node.');
     } else {
       // For other errors during initial load, we should probably exit.
