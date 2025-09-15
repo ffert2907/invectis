@@ -1,13 +1,8 @@
-Nice — great direction. You’re asking whether we can move from a “mobile light client + full server nodes” model to a truly **peer-to-peer (P2P) distributed storage** where mobile devices themselves (plus some optional lightweight servers for discovery/bootstrapping) collectively hold the full ledger — no central authoritative storage. That’s possible, but it changes trade-offs, complexity, and operational constraints significantly. Below I:
-
-1. Analyze your requirement and point out correctness, limitations and risks.
-2. Give a complete, revised specification that builds on everything we already discussed (Helia/IPLD model, attestations, storage API, mobile adapters), adapted for a mostly peer-only architecture with server nodes used only for bootstrapping / rendezvous.
-
-I’ll be explicit about what’s feasible on mobile, what’s risky, and exactly what to implement.
+Build a truly **peer-to-peer (P2P) distributed storage** where mobile devices themselves (plus some optional lightweight servers for discovery/bootstrapping) collectively hold the full ledger — no central authoritative storage. 
 
 # 1 — Analysis of your requirement (is it correct / feasible?)
 
-Short answer: **Yes — you can design a mostly P2P distributed ledger using mobile devices as peers**, with server nodes only for bootstrap/rendezvous. But there are significant practical constraints and design trade-offs you must accept:
+Short answer: **you can design a mostly P2P distributed ledger using mobile devices as peers**, with server nodes only for bootstrap/rendezvous. But there are significant practical constraints and design trade-offs you must accept:
 
 ## What makes it feasible
 
@@ -43,7 +38,7 @@ Short answer: **Yes — you can design a mostly P2P distributed ledger using mob
 
 ---
 
-# 2 — New specifications (detailed)
+# 2 — specifications (detailed)
 
 Below is a specification and implementation plan for a **peer-first decentralized ledger** that runs across mobile devices and servers used only for bootstrap/rendezvous. It incorporates the earlier Helia/IPLD, attestations, storage API, mobile adapters and extends them for full P2P operation.
 
@@ -320,14 +315,4 @@ interface P2PStorageAPI {
 * Default retention on mobile: last 30 days or last 1000 txs per wallet (user configurable).
 * Enable optional full-node mode on desktop with unlimited retention.
 
----
 
-## Deliverables I can produce now (pick any)
-
-* A. Concrete TypeScript/Node.js reference implementation of the `P2PStorageAPI` using Helia + SQLite adapter for mobile emulation, including the replication manager and head announcement.
-* B. A test harness that launches N emulated mobile peers (SQLite adapters) + M relays and runs churn + RF tests.
-* C. Detailed sequence diagrams & protocol message formats (JSON examples) for announce, attest, provide, fetch.
-* D. A sample CLI for managing pins, exporting CARs, and bootstrapping a local relay.
-* E. A short whitepaper / README summarizing privacy and incentive recommendations for stakeholders.
-
-Tell me which deliverable you want first and I’ll generate it. If you want code, I’ll produce a runnable Node.js example (option A) that simulates two mobile peers and one relay, demonstrates the announce/pull flow, and shows how replication factor can be achieved.
