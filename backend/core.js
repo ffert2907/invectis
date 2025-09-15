@@ -8,6 +8,7 @@ import { createSetDailyBonusPayload, signTransaction } from './transaction.js';
 import { TextEncoder } from 'util';
 import { json } from '@helia/json'
 import { logger } from './config.js'
+import { CID } from 'multiformats/cid'
 
 // Topic GossipSub pour le registre global
 const GLOBAL_LEDGER_TOPIC = '/invectis/global-ledger/1.0'
@@ -22,6 +23,40 @@ export const appContext = {
   receivedMessages: [],
   nullifiers: new Set(), // A set to store registered nullifiers
   publishQueue: [], // A queue for transactions that need to be published
+}
+
+/**
+ * Recursively fetches all blocks in a DAG starting from a given CID.
+ * It uses the provided Helia instance, which will automatically use Bitswap
+ * to retrieve blocks from the network if they are not available locally.
+ * @param {CID} cid - The root CID of the DAG to fetch.
+ * @param {import('@helia/json').HeliaJSON} heliaJsonInstance - The Helia/JSON instance.
+ * @param {Set<string>} visited - A set to keep track of visited CIDs to avoid re-fetching.
+ */
+async function fetchDag(cid, heliaJsonInstance, visited = new Set()) {
+  const cidString = cid.toString();
+  if (visited.has(cidString)) {
+    return; // Already visited or in the process of fetching
+  }
+  visited.add(cidString);
+  logger.info(`Fetching DAG for CID: ${cidString}`);
+
+  try {
+    const transaction = await heliaJsonInstance.get(cid);
+    if (!transaction) {
+      logger.warn(`Could not fetch block for CID: ${cidString}`);
+      return;
+    }
+    logger.info(`Successfully fetched block for CID: ${cidString}`);
+
+    if (transaction.parents && transaction.parents.length > 0) {
+      for (const parentCidString of transaction.parents) {
+        await fetchDag(CID.parse(parentCidString), heliaJsonInstance, visited);
+      }
+    }
+  } catch (error) {
+    logger.error(`Error fetching block for CID ${cidString}:`, error);
+  }
 }
 
 /**
@@ -58,6 +93,13 @@ export async function startNode(wallet, datastorePath) {
   // 2. Create and set the initial attestation.
   appContext.attestation = await createAndSetAttestation(node, wallet);
 
+  // 3. Set the head provider for the P2P layer
+  node.setHeadProvider(() => {
+    // Return the last known head CID. A more complex strategy could be implemented here later.
+    if (appContext.dagHeads.length === 0) return null;
+    return appContext.dagHeads[appContext.dagHeads.length - 1];
+  });
+
   // 4. Augment wallet object with a signing function for convenience.
   appContext.wallet.sign = (data) => wallet.privateKey.sign(data);
 
@@ -69,6 +111,30 @@ export async function startNode(wallet, datastorePath) {
   // 5. Start the node
   await node.start();
   logger.prod('Core: Node started successfully');
+
+  // After starting, try to sync with the network
+  try {
+    const BOOTSTRAP_PEER_ID = 'QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN';
+    const peerId = peerIdFromString(BOOTSTRAP_PEER_ID);
+
+    logger.info(`Core: Querying bootstrap peer ${BOOTSTRAP_PEER_ID} for its latest head...`);
+    const headCid = await appContext.node.getHeadFrom(peerId);
+
+    if (headCid) {
+      logger.info(`Core: Received head ${headCid.toString()} from bootstrap peer. Fetching its history...`);
+      await fetchDag(headCid, appContext.j);
+
+      const headCidString = headCid.toString();
+      if (!appContext.dagHeads.find(h => h.toString() === headCidString)) {
+          appContext.dagHeads.push(headCid);
+          logger.info(`Core: Added new head from bootstrap peer: ${headCidString}`);
+      }
+    } else {
+      logger.warn(`Core: Could not get head from bootstrap peer ${BOOTSTRAP_PEER_ID}. It might be offline or not have a head.`);
+    }
+  } catch (err) {
+    logger.error('Core: Error while syncing with bootstrap peer:', err);
+  }
 
   // 6. Subscribe to the global topic
   await node.libp2p.services.pubsub.subscribe(GLOBAL_LEDGER_TOPIC);
@@ -124,6 +190,14 @@ export async function startNode(wallet, datastorePath) {
           const { nullifier } = message.payload;
           appContext.nullifiers.add(nullifier);
           logger.info(`Core: New nullifier registered: ${nullifier}`);
+        }
+
+        // Before adding the new transaction, ensure its parents are fetched
+        if (message.parents && message.parents.length > 0) {
+            logger.info(`Core: New transaction has parents. Fetching their history...`);
+            for (const parentCidString of message.parents) {
+                await fetchDag(CID.parse(parentCidString), appContext.j);
+            }
         }
 
         const cid = await appContext.j.add(message)
