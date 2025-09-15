@@ -6,7 +6,7 @@ import { yamux } from '@chainsafe/libp2p-yamux'
 import { identify } from '@libp2p/identify'
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { createHelia } from 'helia'
-import { MemoryDatastore } from 'datastore-core'
+import { DatastoreWrapper } from './datastore_wrapper.js'
 import { keys } from '@libp2p/crypto'
 import { peerIdFromPrivateKey } from '@libp2p/peer-id'
 import { pipe } from 'it-pipe'
@@ -30,9 +30,11 @@ const BOOTSTRAP_NODES = [
  * Creates and configures a P2P node with Helia, WebSockets support, and a decoupled identity.
  * The node generates its own ephemeral PeerID and exposes a method to serve a wallet-signed attestation.
  * @param {string} datastorePath - The path to the local database directory.
+ * @param {object} options - Additional options for node behavior.
+ * @param {function(CID): Promise<void>} options.onPinRequest - Callback to handle a pin request from a peer.
  * @returns {Promise<import('helia').Helia & { setAttestation: (attestation: object) => void, privateKey: import('@libp2p/interface-keys').PrivateKey }>} - A configured Helia instance with additional properties.
  */
-export async function createNode(datastorePath) {
+export async function createNode(datastorePath, options = {}) {
   // This variable will hold the signed attestation and is captured in the handler's closure.
   let currentAttestation = null;
   let currentHeadProvider = () => null; // Default provider returns null
@@ -43,7 +45,7 @@ export async function createNode(datastorePath) {
   logger.info(`P2P: Generated ephemeral node PeerId: ${peerId.toString()}`);
 
   // Configure the local database for storage
-  const datastore = new MemoryDatastore()
+  const datastore = new DatastoreWrapper(datastorePath)
 
   // Configure libp2p with WebSockets, DHT, and circuit relay
   const libp2pConfig = {
@@ -118,6 +120,34 @@ export async function createNode(datastorePath) {
     } else {
       logger.warn('P2P: No attestation available to serve, closing stream.');
       stream.close();
+    }
+  });
+
+  // Replication protocol handler
+  await libp2p.handle('/app/replicate/1.0.0', async ({ stream, connection }) => {
+    logger.info(`P2P: Received replication request from ${connection.remotePeer.toString()}`);
+    try {
+      const cidString = await pipe(
+        stream.source,
+        async function (source) {
+          const chunks = [];
+          for await (const chunk of source) {
+            chunks.push(chunk.subarray());
+          }
+          return uint8ArrayToString(Buffer.concat(chunks));
+        }
+      );
+
+      if (cidString && options.onPinRequest) {
+        const cid = CID.parse(cidString);
+        logger.info(`P2P: Peer requested pinning of ${cid.toString()}`);
+        await options.onPinRequest(cid);
+        logger.info(`P2P: Successfully processed pin request for ${cid.toString()}`);
+      }
+      stream.close();
+    } catch (err) {
+      logger.error('P2P: Error handling replication request:', err);
+      stream.abort(err);
     }
   });
 

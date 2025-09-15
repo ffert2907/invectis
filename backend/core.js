@@ -9,6 +9,9 @@ import { TextEncoder } from 'util';
 import { json } from '@helia/json'
 import { logger } from './config.js'
 import { CID } from 'multiformats/cid'
+import path from 'path'
+import { PinManager, GarbageCollector } from './storage.js'
+import { ReplicationManager } from './replication.js'
 
 // Topic GossipSub pour le registre global
 const GLOBAL_LEDGER_TOPIC = '/invectis/global-ledger/1.0'
@@ -23,6 +26,9 @@ export const appContext = {
   receivedMessages: [],
   nullifiers: new Set(), // A set to store registered nullifiers
   publishQueue: [], // A queue for transactions that need to be published
+  pinManager: null,
+  replicationManager: null,
+  gc: null,
 }
 
 /**
@@ -84,8 +90,27 @@ export async function createAndSetAttestation(node, wallet) {
 export async function startNode(wallet, datastorePath) {
   logger.info('Core: Initializing P2P node with decoupled identity...');
 
-  // 1. Create the P2P node. It will generate its own ephemeral PeerID.
-  const node = await createNode(datastorePath);
+  // 1. Initialize Pin Manager
+  const pinDbPath = path.join(datastorePath, 'pins');
+  appContext.pinManager = new PinManager(pinDbPath);
+  await appContext.pinManager.open();
+  logger.info('Core: Pin manager initialized.');
+
+  // 2. Create the P2P node. It will generate its own ephemeral PeerID.
+  const node = await createNode(datastorePath, {
+    onPinRequest: async (cid) => {
+      logger.info(`Core: Received pin request for ${cid.toString()}. Fetching and pinning...`);
+      try {
+        // First, ensure the data is downloaded. j.get will do this automatically via bitswap.
+        await appContext.j.get(cid);
+        // Then, pin it.
+        await appContext.pinManager.pin(cid);
+        logger.info(`Core: Successfully fetched and pinned ${cid.toString()}`);
+      } catch (err) {
+        logger.error(`Core: Failed to fetch or pin ${cid.toString()}:`, err);
+      }
+    }
+  });
   appContext.node = node;
   appContext.wallet = wallet;
   appContext.j = json(node);
@@ -103,14 +128,32 @@ export async function startNode(wallet, datastorePath) {
   // 4. Augment wallet object with a signing function for convenience.
   appContext.wallet.sign = (data) => wallet.privateKey.sign(data);
 
+  // 5. Initialize Garbage Collector
+  appContext.gc = new GarbageCollector({
+    blockstore: appContext.node.blockstore,
+    heliaJson: appContext.j,
+    pinManager: appContext.pinManager,
+  });
+  logger.info('Core: Garbage collector initialized.');
+
+  // 6. Initialize and start the Replication Manager
+  appContext.replicationManager = new ReplicationManager({
+    libp2p: appContext.node.libp2p,
+    pinManager: appContext.pinManager
+  });
+  appContext.replicationManager.start();
+  logger.info('Core: Replication manager started.');
+
   const nodePeerId = node.libp2p.peerId;
   logger.prod(`Core: Wallet ID: ${wallet.peerId.toString()}`);
   logger.prod(`Core: Node ID:   ${nodePeerId.toString()}`);
   logger.info('Core: Attestation created and set.');
 
-  // 5. Start the node
+  // 7. Start the node
   await node.start();
   logger.prod('Core: Node started successfully');
+
+  return node;
 
   // After starting, try to sync with the network
   try {
@@ -136,11 +179,11 @@ export async function startNode(wallet, datastorePath) {
     logger.error('Core: Error while syncing with bootstrap peer:', err);
   }
 
-  // 6. Subscribe to the global topic
+  // 8. Subscribe to the global topic
   await node.libp2p.services.pubsub.subscribe(GLOBAL_LEDGER_TOPIC);
   logger.prod(`Core: Subscribed to topic: ${GLOBAL_LEDGER_TOPIC}`);
 
-  // 7. Set up message listener
+  // 9. Set up message listener
   node.libp2p.services.pubsub.addEventListener('message', async (event) => {
     if (event.detail.topic !== GLOBAL_LEDGER_TOPIC) return
 
