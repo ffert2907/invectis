@@ -406,6 +406,11 @@ function setupIPCListeners() {
                     process.send({ type: 'result', id: message.id, data: providers.length });
                     break;
 
+                case 'get-reputation':
+                    const score = appContext.reputationManager.getScore(message.data.peerId);
+                    process.send({ type: 'result', id: message.id, data: score });
+                    break;
+
                 case 'stop':
                     process.emit('SIGINT');
                     break;
