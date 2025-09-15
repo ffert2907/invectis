@@ -4,6 +4,8 @@ import { generateNullifier } from './identity.js';
 import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 import { randomUUID } from 'crypto';
 import { TextEncoder } from 'util';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { randomBytes as randomBytesNoble } from '@noble/hashes/utils';
 
 /**
  * Loads a wallet from a file.
@@ -34,6 +36,22 @@ export async function loadWalletFromFile(filePath, options = {}) {
   const country = walletData.country;
   const city = walletData.city;
   const nullifier = walletData.nullifier; // Changed from nationalIdHash
+  let encryptionPrivateKey = walletData.encryptionPrivateKey ? Buffer.from(walletData.encryptionPrivateKey, 'base64') : null;
+  let encryptionPublicKey = walletData.encryptionPublicKey ? Buffer.from(walletData.encryptionPublicKey, 'base64') : null;
+
+  // Self-migration for old wallets
+  if (!encryptionPrivateKey || !encryptionPublicKey) {
+    logger.info(`Wallet at ${filePath} is an older version. Upgrading with new encryption keys...`);
+    encryptionPrivateKey = randomBytesNoble(32);
+    encryptionPublicKey = secp256k1.getPublicKey(encryptionPrivateKey);
+
+    walletData.encryptionPrivateKey = Buffer.from(encryptionPrivateKey).toString('base64');
+    walletData.encryptionPublicKey = Buffer.from(encryptionPublicKey).toString('base64');
+
+    await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8');
+    logger.info(`✅ Wallet upgraded and saved to ${filePath}`);
+  }
+
 
   if (!quiet) {
     logger.info(`✅ Existing wallet loaded (Account Type: ${accountType})`);
@@ -45,7 +63,9 @@ export async function loadWalletFromFile(filePath, options = {}) {
     accountType,
     country,
     city,
-    nullifier
+    nullifier,
+    encryptionPrivateKey,
+    encryptionPublicKey
   }
 }
 
@@ -135,6 +155,10 @@ export async function createWallet(filePath, {
   const privateKey = await libp2pCrypto.keys.privateKeyFromProtobuf(marshalledKey);
   const peerId = await peerIdFromPrivateKey(privateKey);
 
+  // Generate a secp256k1 key pair for encryption
+  const encryptionPrivateKey = randomBytesNoble(32);
+  const encryptionPublicKey = secp256k1.getPublicKey(encryptionPrivateKey);
+
   const walletData = {
     version: '1.0',
     type: 'Ed25519',
@@ -144,6 +168,8 @@ export async function createWallet(filePath, {
     nullifier,
     // The base64 version is for saving to disk only.
     privateKey: Buffer.from(marshalledKey).toString('base64'),
+    encryptionPrivateKey: Buffer.from(encryptionPrivateKey).toString('base64'),
+    encryptionPublicKey: Buffer.from(encryptionPublicKey).toString('base64'),
     created: new Date().toISOString()
   };
 
@@ -152,12 +178,16 @@ export async function createWallet(filePath, {
     logger.info(`✅ New wallet created and saved to ${filePath} (Account Type: ${accountType})`);
   }
 
-  // Remove the base64 private key from the data we will merge into the final object.
+  // Remove the base64 private keys from the data we will merge into the final object.
   delete walletData.privateKey;
+  delete walletData.encryptionPrivateKey;
+
 
   // Return the live, canonical private key object along with the rest of the metadata.
   return {
     privateKey, // The actual crypto key object
+    encryptionPrivateKey,
+    encryptionPublicKey,
     peerId,
     ...walletData // The rest of the wallet metadata
   };
@@ -188,15 +218,16 @@ function canonicalize(object) {
  * @param {number} [ttlSeconds=600] - The time-to-live for the attestation in seconds. Defaults to 10 minutes.
  * @returns {Promise<{attestation: object, signature: string}>} The attestation object and its base64-encoded signature.
  */
-export async function signAttestation(walletPrivateKey, walletPeerId, nodePeerId, ttlSeconds = 600) {
+export async function signAttestation(wallet, nodePeerId, ttlSeconds = 600) {
     const issuedAt = new Date();
     const expiresAt = new Date(issuedAt.getTime() + ttlSeconds * 1000);
 
     const attestation = {
         type: 'wallet-node-attestation',
         version: '1',
-        walletPeerId: walletPeerId.toString(),
-        walletPubKey: Buffer.from(walletPrivateKey.publicKey.raw).toString('base64'),
+        walletPeerId: wallet.peerId.toString(),
+        walletPubKey: Buffer.from(wallet.privateKey.publicKey.raw).toString('base64'),
+        walletEncryptionPubKey: Buffer.from(wallet.encryptionPublicKey).toString('base64'),
         nodePeerId: nodePeerId.toString(),
         issuedAt: issuedAt.toISOString(),
         expiresAt: expiresAt.toISOString(),
@@ -205,7 +236,7 @@ export async function signAttestation(walletPrivateKey, walletPeerId, nodePeerId
     };
 
     const payloadToSign = canonicalize(attestation);
-    const signatureBytes = await walletPrivateKey.sign(new TextEncoder().encode(payloadToSign));
+    const signatureBytes = await wallet.privateKey.sign(new TextEncoder().encode(payloadToSign));
     const signature = Buffer.from(signatureBytes).toString('base64');
 
     logger.info(`✅ Attestation signed for Node ${nodePeerId.toString()}`);

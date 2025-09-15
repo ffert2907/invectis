@@ -3,6 +3,8 @@ import { promises as fs } from 'fs';
 import { VECTORS } from './vectors.js';
 import { ACCOUNT_RIGHTS } from './rights.js';
 import stableStringify from 'json-stable-stringify';
+import { encryptPayload } from './crypto.js';
+import { Buffer } from 'buffer';
 
 let ratesCache = null;
 
@@ -41,17 +43,29 @@ export async function updateRates(newRates) {
  * @param {PeerId} recipientPeerId - Identité du destinataire
  * @param {number} amount - Le montant de la transaction.
  * @param {number} nonce - Le nonce de la transaction.
+ * @param {Buffer} [recipientPublicKey] - The recipient's public key for encryption.
  * @returns {Object} - Transaction non signée
  */
-export function createPaymentPayload(wallet, recipientPeerId, amount, nonce, description, reference) {
+export function createPaymentPayload(wallet, recipientPeerId, amount, nonce, description, reference, recipientPublicKey) {
   // No rights check for this transaction type
-  return {
+  const payload = {
     to: recipientPeerId.toString(),
     description: description || '',
     reference: reference || '',
     amount: amount,
     nonce: nonce,
     currency: 'TOKEN'
+  };
+
+  if (recipientPublicKey) {
+    const encryptedData = encryptPayload(Buffer.from(JSON.stringify(payload)), recipientPublicKey);
+    return {
+      to: recipientPeerId.toString(),
+      isEncrypted: true,
+      encryptedData
+    };
+  } else {
+    return payload;
   }
 }
 
@@ -223,9 +237,10 @@ export function createSetDailyBonusPayload(wallet, walletBalance, dailyTransacti
  * @param {PeerId} recipientPeerId - Identité du destinataire
  * @param {object} vectorValues - Les valeurs pour chaque vecteur
  * @param {number} nonce - Le nonce de la transaction.
+ * @param {Buffer} [recipientPublicKey] - The recipient's public key for encryption.
  * @returns {Promise<Object>} - Transaction non signée
  */
-export async function createVectorPayload(wallet, recipientPeerId, vectorValues, nonce, description, reference) {
+export async function createVectorPayload(wallet, recipientPeerId, vectorValues, nonce, description, reference, recipientPublicKey) {
   hasRight(wallet.accountType, 'VECTOR_TRANSACTION')
   const { currentRates } = await getRates()
   let totalTime = 0
@@ -239,13 +254,24 @@ export async function createVectorPayload(wallet, recipientPeerId, vectorValues,
     totalTime += value * currentRates[vectorName]
   }
 
-  return {
+  const payload = {
     to: recipientPeerId.toString(),
     description: description || '',
     reference: reference || '',
     vectors: vectorValues,
     totalTime: totalTime,
     nonce: nonce
+  };
+
+  if (recipientPublicKey) {
+    const encryptedData = encryptPayload(Buffer.from(JSON.stringify(payload)), recipientPublicKey);
+    return {
+      to: recipientPeerId.toString(),
+      isEncrypted: true,
+      encryptedData
+    };
+  } else {
+    return payload;
   }
 }
 

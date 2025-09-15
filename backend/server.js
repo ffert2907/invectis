@@ -344,10 +344,21 @@ async function main() {
       switch (type.toUpperCase()) {
         case 'PAYMENT':
           await applyAutomaticBonus();
-          transactionPayload = createPaymentPayload(appContext.wallet, getRecipientPeerId(payload.to), payload.amount, payload.nonce, description, reference);
+          const recipientPeerId = getRecipientPeerId(payload.to);
+          // For payments, we'll try to encrypt them.
+          const recipientPublicKey = await appContext.node.getPublicKey(recipientPeerId);
+          if (!recipientPublicKey) {
+            logger.warn(`API: Could not retrieve public key for ${recipientPeerId.toString()}. Sending unencrypted.`);
+          }
+          transactionPayload = createPaymentPayload(appContext.wallet, recipientPeerId, payload.amount, payload.nonce, description, reference, recipientPublicKey);
           break;
         case 'VECTOR_TRANSACTION':
-          transactionPayload = await createVectorPayload(appContext.wallet, getRecipientPeerId(payload.to), payload.vectors, description, reference);
+          const vecRecipientPeerId = getRecipientPeerId(payload.to);
+          const vecRecipientPublicKey = await appContext.node.getPublicKey(vecRecipientPeerId);
+           if (!vecRecipientPublicKey) {
+            logger.warn(`API: Could not retrieve public key for ${vecRecipientPeerId.toString()}. Sending unencrypted.`);
+          }
+          transactionPayload = await createVectorPayload(appContext.wallet, vecRecipientPeerId, payload.vectors, description, reference, vecRecipientPublicKey);
           break;
         case 'SETRATERATIO':
           transactionPayload = createSetRateRatioPayload(appContext.wallet, payload.rates, description, reference);

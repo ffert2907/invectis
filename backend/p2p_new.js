@@ -38,6 +38,7 @@ export async function createNode(datastorePath, options = {}) {
   // This variable will hold the signed attestation and is captured in the handler's closure.
   let currentAttestation = null;
   let currentHeadProvider = () => null; // Default provider returns null
+const publicKeyCache = new Map(); // A simple in-memory cache for public keys
 
   // 1. Generate an ephemeral identity for this node session.
   const nodeKey = await keys.generateKeyPair('Ed25519');
@@ -215,6 +216,43 @@ export async function createNode(datastorePath, options = {}) {
   // Attach the node's private key to the returned instance.
   // This is useful if the key needs to be persisted.
   helia.privateKey = nodeKey;
+
+  helia.getPublicKey = async (peerId) => {
+    const peerIdString = peerId.toString();
+    if (publicKeyCache.has(peerIdString)) {
+      return publicKeyCache.get(peerIdString);
+    }
+
+    logger.info(`P2P: Requesting attestation from peer ${peerIdString} to get public key...`);
+    try {
+      const stream = await libp2p.dialProtocol(peerId, '/app/attest/1.0.0');
+      const attestationString = await pipe(
+        stream.source,
+        async function (source) {
+          const chunks = [];
+          for await (const chunk of source) {
+            chunks.push(chunk.subarray());
+          }
+          return uint8ArrayToString(Buffer.concat(chunks));
+        }
+      );
+      stream.close();
+
+      if (attestationString) {
+        const { attestation } = JSON.parse(attestationString);
+        if (attestation && attestation.walletEncryptionPubKey) {
+          const publicKey = Buffer.from(attestation.walletEncryptionPubKey, 'base64');
+          publicKeyCache.set(peerIdString, publicKey);
+          logger.info(`P2P: Successfully retrieved and cached public key for ${peerIdString}`);
+          return publicKey;
+        }
+      }
+      return null;
+    } catch (err) {
+      logger.error(`P2P: Could not get public key from peer ${peerIdString}:`, err);
+      return null;
+    }
+  };
 
   return helia;
 }

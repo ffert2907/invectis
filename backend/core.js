@@ -1,6 +1,8 @@
 import { createNode } from './p2p.js'
 import { signAttestation } from './wallet.js'
 import { verifyTransaction } from './transaction.js'
+import { decryptPayload } from './crypto.js'
+import { Buffer } from 'buffer'
 import { calculateBalance, getNonce, hasReceivedBonusToday, calculateDailyTransactionSum } from './ledger.js'
 import { formatTransactionForFrontend } from './api.js'
 import { peerIdFromString } from '@libp2p/peer-id'
@@ -81,7 +83,7 @@ async function fetchDag(cid, heliaJsonInstance, visited = new Set()) {
 export async function createAndSetAttestation(node, wallet) {
   logger.info('Core: Creating and setting new attestation...');
   const nodePeerId = node.libp2p.peerId;
-  const signedAttestation = await signAttestation(wallet.privateKey, wallet.peerId, nodePeerId);
+  const signedAttestation = await signAttestation(wallet, nodePeerId);
   node.setAttestation(signedAttestation);
   logger.info('Core: New attestation has been set on the running node.');
   return signedAttestation;
@@ -189,8 +191,25 @@ export async function startNode(wallet, datastorePath) {
 
     try {
       logger.debug('Core: Message received on topic')
-      const message = JSON.parse(new TextDecoder().decode(event.detail.data))
+      let message = JSON.parse(new TextDecoder().decode(event.detail.data))
       logger.debug('Core: Message decoded:', message)
+
+      // Decrypt the payload if it's an encrypted transaction for us
+      if (message.payload.isEncrypted && message.payload.to === appContext.wallet.peerId.toString()) {
+        try {
+          logger.info(`Core: Received an encrypted transaction for this wallet. Attempting to decrypt...`);
+          const decryptedPayloadBuffer = decryptPayload(message.payload.encryptedData, appContext.wallet.privateKey);
+          const decryptedPayload = JSON.parse(decryptedPayloadBuffer.toString());
+
+          // Replace the encrypted payload with the decrypted one
+          message.payload = decryptedPayload;
+          logger.info(`Core: Transaction decrypted successfully.`);
+        } catch (err) {
+          logger.error(`Core: Failed to decrypt transaction payload:`, err);
+          // If decryption fails, we can't process it further. We'll treat it as invalid.
+          return;
+        }
+      }
 
       const authorPeerId = peerIdFromString(message.author)
       let isValid = await verifyTransaction(message, authorPeerId)
