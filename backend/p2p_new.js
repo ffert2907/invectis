@@ -17,6 +17,7 @@ import { kadDHT } from '@libp2p/kad-dht'
 import { bootstrap } from '@libp2p/bootstrap'
 import { ping } from '@libp2p/ping'
 import { CID } from 'multiformats/cid'
+import { RateLimiter, createConnectionGater } from './security.js'
 
 // A list of bootstrap nodes to connect to.
 // These are public nodes provided by the libp2p community.
@@ -30,15 +31,17 @@ const BOOTSTRAP_NODES = [
  * Creates and configures a P2P node with Helia, WebSockets support, and a decoupled identity.
  * The node generates its own ephemeral PeerID and exposes a method to serve a wallet-signed attestation.
  * @param {string} datastorePath - The path to the local database directory.
+ * @param {import('./security.js').ReputationManager} reputationManager - The reputation manager instance.
  * @param {object} options - Additional options for node behavior.
  * @param {function(CID): Promise<void>} options.onPinRequest - Callback to handle a pin request from a peer.
  * @returns {Promise<import('helia').Helia & { setAttestation: (attestation: object) => void, privateKey: import('@libp2p/interface-keys').PrivateKey }>} - A configured Helia instance with additional properties.
  */
-export async function createNode(datastorePath, options = {}) {
+export async function createNode(datastorePath, reputationManager, options = {}) {
   // This variable will hold the signed attestation and is captured in the handler's closure.
   let currentAttestation = null;
   let currentHeadProvider = () => null; // Default provider returns null
-const publicKeyCache = new Map(); // A simple in-memory cache for public keys
+  const publicKeyCache = new Map(); // A simple in-memory cache for public keys
+  const protocolRateLimiter = new RateLimiter(5, 10); // 5 req/sec, burst 10
 
   // 1. Generate an ephemeral identity for this node session.
   const nodeKey = await keys.generateKeyPair('Ed25519');
@@ -90,13 +93,11 @@ const publicKeyCache = new Map(); // A simple in-memory cache for public keys
     },
     peerDiscovery: [
         bootstrap({
-          list: BOOTSTRAP_NODES,
+          list: process.env.NODE_ENV === 'test' ? [] : BOOTSTRAP_NODES,
           timeout: 1000, // in ms,
         })
     ],
-    connectionGater: {
-      denyDialMultiaddr: () => false
-    },
+    connectionGater: createConnectionGater(reputationManager),
     connectionManager: {
       minConnections: 0,
       maxConnections: 100,
@@ -109,7 +110,14 @@ const publicKeyCache = new Map(); // A simple in-memory cache for public keys
 
   // 2. Set up protocol handlers
   // Attestation handler
-  await libp2p.handle('/app/attest/1.0.0', ({ stream }) => {
+  await libp2p.handle('/app/attest/1.0.0', ({ stream, connection }) => {
+    const remotePeerId = connection.remotePeer.toString();
+    if (!protocolRateLimiter.isAllowed(remotePeerId)) {
+      logger.warn(`P2P: Rate limit exceeded for peer ${remotePeerId} on /app/attest/1.0.0. Aborting stream.`);
+      reputationManager.rateLimitExceeded(remotePeerId);
+      return stream.abort(new Error('Rate limit exceeded'));
+    }
+
     if (currentAttestation) {
       logger.info(`P2P: Serving attestation to requesting peer.`);
       pipe(
@@ -126,7 +134,14 @@ const publicKeyCache = new Map(); // A simple in-memory cache for public keys
 
   // Replication protocol handler
   await libp2p.handle('/app/replicate/1.0.0', async ({ stream, connection }) => {
-    logger.info(`P2P: Received replication request from ${connection.remotePeer.toString()}`);
+    const remotePeerId = connection.remotePeer.toString();
+    if (!protocolRateLimiter.isAllowed(remotePeerId)) {
+      logger.warn(`P2P: Rate limit exceeded for peer ${remotePeerId} on /app/replicate/1.0.0. Aborting stream.`);
+      reputationManager.rateLimitExceeded(remotePeerId);
+      return stream.abort(new Error('Rate limit exceeded'));
+    }
+
+    logger.info(`P2P: Received replication request from ${remotePeerId}`);
     try {
       const cidString = await pipe(
         stream.source,
@@ -142,7 +157,7 @@ const publicKeyCache = new Map(); // A simple in-memory cache for public keys
       if (cidString && options.onPinRequest) {
         const cid = CID.parse(cidString);
         logger.info(`P2P: Peer requested pinning of ${cid.toString()}`);
-        await options.onPinRequest(cid);
+        await options.onPinRequest(cid, connection.remotePeer);
         logger.info(`P2P: Successfully processed pin request for ${cid.toString()}`);
       }
       stream.close();
@@ -153,7 +168,14 @@ const publicKeyCache = new Map(); // A simple in-memory cache for public keys
   });
 
   // Head announcement handler
-  await libp2p.handle('/app/head/1.0.0', ({ stream }) => {
+  await libp2p.handle('/app/head/1.0.0', ({ stream, connection }) => {
+    const remotePeerId = connection.remotePeer.toString();
+    if (!protocolRateLimiter.isAllowed(remotePeerId)) {
+      logger.warn(`P2P: Rate limit exceeded for peer ${remotePeerId} on /app/head/1.0.0. Aborting stream.`);
+      reputationManager.rateLimitExceeded(remotePeerId);
+      return stream.abort(new Error('Rate limit exceeded'));
+    }
+
     const headCid = currentHeadProvider();
     if (headCid) {
       logger.info(`P2P: Serving head ${headCid.toString()} to requesting peer.`);

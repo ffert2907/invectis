@@ -95,15 +95,17 @@ async function main() {
     } else {
       // In console mode, run the interactive CLI
       const addresses = node.libp2p.getMultiaddrs();
+      const peerId = node.libp2p.peerId.toString();
       logger.prod('\nListening addresses:')
-      addresses.forEach(addr => logger.prod(addr.toString()))
+      const fullAddresses = addresses.map(addr => `${addr.toString()}/p2p/${peerId}`);
+      fullAddresses.forEach(addr => logger.prod(addr))
 
        if (!peerAddress) {
         try {
-          const wsAddress = addresses.find(addr => addr.toString().includes('/ws'))
+          const wsAddress = fullAddresses.find(addr => addr.includes('/ws'))
           if (wsAddress) {
-            await clipboardy.write(wsAddress.toString())
-            logger.prod('\n✅ Adresse WebSocket copiée dans le presse-papiers!')
+            await clipboardy.write(wsAddress)
+            logger.prod('\n✅ Full WebSocket multiaddress copied to clipboard!')
           }
         } catch (error) {
           logger.warn('Could not copy to clipboard:', error.message)
@@ -404,6 +406,11 @@ function setupIPCListeners() {
                         providers.push(provider);
                     }
                     process.send({ type: 'result', id: message.id, data: providers.length });
+                    break;
+
+                case 'get-reputation':
+                    const score = appContext.reputationManager.getScore(message.data.peerId);
+                    process.send({ type: 'result', id: message.id, data: score });
                     break;
 
                 case 'stop':
