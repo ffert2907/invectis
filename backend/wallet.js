@@ -5,7 +5,7 @@ import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 import { randomUUID } from 'crypto';
 import { TextEncoder } from 'util';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { randomBytes as randomBytesNoble } from '@noble/curves/abstract/utils';
+import { randomBytes as randomBytesNoble } from '@noble/hashes/utils';
 
 /**
  * Loads a wallet from a file.
