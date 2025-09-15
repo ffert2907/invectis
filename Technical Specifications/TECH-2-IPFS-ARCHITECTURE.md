@@ -1,3 +1,5 @@
+# - PERSISTENT STORAGE DAG
+
 Build a truly **peer-to-peer (P2P) distributed storage** where mobile devices themselves (plus some optional lightweight servers for discovery/bootstrapping) collectively hold the full ledger — no central authoritative storage. 
 
 # 1 — Analysis of your requirement (is it correct / feasible?)
