@@ -36,8 +36,21 @@ export async function loadWalletFromFile(filePath, options = {}) {
   const country = walletData.country;
   const city = walletData.city;
   const nullifier = walletData.nullifier; // Changed from nationalIdHash
-  const encryptionPrivateKey = Buffer.from(walletData.encryptionPrivateKey, 'base64');
-  const encryptionPublicKey = Buffer.from(walletData.encryptionPublicKey, 'base64');
+  let encryptionPrivateKey = walletData.encryptionPrivateKey ? Buffer.from(walletData.encryptionPrivateKey, 'base64') : null;
+  let encryptionPublicKey = walletData.encryptionPublicKey ? Buffer.from(walletData.encryptionPublicKey, 'base64') : null;
+
+  // Self-migration for old wallets
+  if (!encryptionPrivateKey || !encryptionPublicKey) {
+    logger.info(`Wallet at ${filePath} is an older version. Upgrading with new encryption keys...`);
+    encryptionPrivateKey = randomBytesNoble(32);
+    encryptionPublicKey = secp256k1.getPublicKey(encryptionPrivateKey);
+
+    walletData.encryptionPrivateKey = Buffer.from(encryptionPrivateKey).toString('base64');
+    walletData.encryptionPublicKey = Buffer.from(encryptionPublicKey).toString('base64');
+
+    await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8');
+    logger.info(`✅ Wallet upgraded and saved to ${filePath}`);
+  }
 
 
   if (!quiet) {
@@ -223,7 +236,7 @@ export async function signAttestation(wallet, nodePeerId, ttlSeconds = 600) {
     };
 
     const payloadToSign = canonicalize(attestation);
-    const signatureBytes = await walletPrivateKey.sign(new TextEncoder().encode(payloadToSign));
+    const signatureBytes = await wallet.privateKey.sign(new TextEncoder().encode(payloadToSign));
     const signature = Buffer.from(signatureBytes).toString('base64');
 
     logger.info(`✅ Attestation signed for Node ${nodePeerId.toString()}`);
