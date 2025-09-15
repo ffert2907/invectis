@@ -413,11 +413,13 @@ async function main() {
     if (appContext.node) {
       logger.prod(`✅ Wallet loaded: ${walletFile}`);
       const allAddresses = appContext.node.libp2p.getMultiaddrs().map(a => a.toString());
+      const peerId = appContext.node.libp2p.peerId.toString();
       const localWsAddress = allAddresses.find(a => a.includes('/ip4/127.0.0.1/') && a.includes('/ws'));
       if (localWsAddress) {
+        const fullAddress = `${localWsAddress}/p2p/${peerId}`;
         logger.prod('------------------------------------------------------------------');
-        logger.prod('To connect a local client, use this address:');
-        logger.prod(localWsAddress);
+        logger.prod('To connect a local client, use this full multiaddress:');
+        logger.prod(fullAddress);
         logger.prod('------------------------------------------------------------------');
       }
     }
