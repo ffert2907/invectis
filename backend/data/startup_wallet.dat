@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "type": "Ed25519",
+  "accountType": "individual",
+  "country": "USA",
+  "city": "New York",
+  "nullifier": "0cf088c56820abbf69fe45999239a300d99902a8036cc4d28cc0d0dbd8f2f0ab",
+  "privateKey": "CAESQCFI2tcth3fyavmfq4XQefTjU8kcST+l0D1KGtoqzVWZBeXShAWnRL5Sgzm/AmzPb5FdveydaQltThuX64A42J8=",
+  "encryptionPrivateKey": "fHo7S1YvE9v/sMEljeVO+0E/N0HL03+HwLVsNPdmevc=",
+  "encryptionPublicKey": "AkDkjhz7X6X2I9ibR1xPtHn6SBJK4SQp2VLhmTo+pvud",
+  "created": "2025-09-15T21:15:45.562Z"
+}

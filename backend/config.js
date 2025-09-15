@@ -46,3 +46,6 @@ format.colorize().addColors(customLevels.colors);
 // source like a hardware security module (HSM) or a secret management service.
 // It should NOT be hardcoded.
 export const PEPPER = 'a-very-secret-pepper-that-is-not-so-secret';
+
+// Maximum size for a file/DAG to be pinned via replication request, in bytes.
+export const MAX_PIN_SIZE = 10 * 1024 * 1024; // 10 MB

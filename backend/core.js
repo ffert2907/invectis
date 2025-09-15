@@ -1,4 +1,4 @@
-import { createNode } from './p2p.js'
+import { createNode } from './p2p_new.js'
 import { signAttestation } from './wallet.js'
 import { verifyTransaction } from './transaction.js'
 import { decryptPayload } from './crypto.js'
@@ -9,11 +9,12 @@ import { peerIdFromString } from '@libp2p/peer-id'
 import { createSetDailyBonusPayload, signTransaction } from './transaction.js';
 import { TextEncoder } from 'util';
 import { json } from '@helia/json'
-import { logger } from './config.js'
+import { logger, MAX_PIN_SIZE } from './config.js'
 import { CID } from 'multiformats/cid'
 import path from 'path'
 import { PinManager, GarbageCollector } from './storage.js'
 import { ReplicationManager } from './replication.js'
+import { ReputationManager, RateLimiter } from './security.js'
 
 // Topic GossipSub pour le registre global
 const GLOBAL_LEDGER_TOPIC = '/invectis/global-ledger/1.0'
@@ -31,6 +32,8 @@ export const appContext = {
   pinManager: null,
   replicationManager: null,
   gc: null,
+  reputationManager: null,
+  pubsubRateLimiter: null
 }
 
 /**
@@ -92,18 +95,34 @@ export async function createAndSetAttestation(node, wallet) {
 export async function startNode(wallet, datastorePath) {
   logger.info('Core: Initializing P2P node with decoupled identity...');
 
-  // 1. Initialize Pin Manager
+  // 1. Initialize security components
+  appContext.reputationManager = new ReputationManager();
+  appContext.pubsubRateLimiter = new RateLimiter(0.5, 2); // 0.5 msg/sec, burst 2
+  logger.info('Core: Security components initialized.');
+
+  // 2. Initialize Pin Manager
   const pinDbPath = path.join(datastorePath, 'pins');
   appContext.pinManager = new PinManager(pinDbPath);
   await appContext.pinManager.open();
   logger.info('Core: Pin manager initialized.');
 
-  // 2. Create the P2P node. It will generate its own ephemeral PeerID.
-  const node = await createNode(datastorePath, {
-    onPinRequest: async (cid) => {
-      logger.info(`Core: Received pin request for ${cid.toString()}. Fetching and pinning...`);
+  // 3. Create the P2P node. It will generate its own ephemeral PeerID.
+  const node = await createNode(datastorePath, appContext.reputationManager, {
+    onPinRequest: async (cid, remotePeer) => {
+      const remotePeerId = remotePeer.toString();
+      logger.info(`Core: Received pin request for ${cid.toString()} from ${remotePeerId}.`);
       try {
-        // First, ensure the data is downloaded. j.get will do this automatically via bitswap.
+        // --- Spam Defense ---
+        // First, get the root block to check its size before fetching the whole DAG.
+        const rootBlock = await appContext.node.blockstore.get(cid);
+        if (rootBlock.length > MAX_PIN_SIZE) {
+          logger.warn(`Core: Peer ${remotePeerId} requested to pin a file larger than MAX_PIN_SIZE (${rootBlock.length} > ${MAX_PIN_SIZE}). Rejecting.`);
+          appContext.reputationManager.invalidTransaction(remotePeerId); // Penalize for spam
+          throw new Error('File size exceeds maximum pin size.');
+        }
+        logger.info(`Core: Root block size check passed for ${cid.toString()}.`);
+
+        // Now, ensure the full DAG is downloaded. j.get will do this automatically via bitswap.
         await appContext.j.get(cid);
         // Then, pin it.
         await appContext.pinManager.pin(cid);
@@ -117,20 +136,20 @@ export async function startNode(wallet, datastorePath) {
   appContext.wallet = wallet;
   appContext.j = json(node);
 
-  // 2. Create and set the initial attestation.
+  // 4. Create and set the initial attestation.
   appContext.attestation = await createAndSetAttestation(node, wallet);
 
-  // 3. Set the head provider for the P2P layer
+  // 5. Set the head provider for the P2P layer
   node.setHeadProvider(() => {
     // Return the last known head CID. A more complex strategy could be implemented here later.
     if (appContext.dagHeads.length === 0) return null;
     return appContext.dagHeads[appContext.dagHeads.length - 1];
   });
 
-  // 4. Augment wallet object with a signing function for convenience.
+  // 6. Augment wallet object with a signing function for convenience.
   appContext.wallet.sign = (data) => wallet.privateKey.sign(data);
 
-  // 5. Initialize Garbage Collector
+  // 7. Initialize Garbage Collector
   appContext.gc = new GarbageCollector({
     blockstore: appContext.node.blockstore,
     heliaJson: appContext.j,
@@ -138,7 +157,7 @@ export async function startNode(wallet, datastorePath) {
   });
   logger.info('Core: Garbage collector initialized.');
 
-  // 6. Initialize and start the Replication Manager
+  // 8. Initialize and start the Replication Manager
   appContext.replicationManager = new ReplicationManager({
     libp2p: appContext.node.libp2p,
     pinManager: appContext.pinManager
@@ -151,7 +170,7 @@ export async function startNode(wallet, datastorePath) {
   logger.prod(`Core: Node ID:   ${nodePeerId.toString()}`);
   logger.info('Core: Attestation created and set.');
 
-  // 7. Start the node
+  // 9. Start the node
   await node.start();
   logger.prod('Core: Node started successfully');
 
@@ -185,9 +204,18 @@ export async function startNode(wallet, datastorePath) {
   await node.libp2p.services.pubsub.subscribe(GLOBAL_LEDGER_TOPIC);
   logger.prod(`Core: Subscribed to topic: ${GLOBAL_LEDGER_TOPIC}`);
 
-  // 9. Set up message listener
+  // 11. Set up message listener
   node.libp2p.services.pubsub.addEventListener('message', async (event) => {
     if (event.detail.topic !== GLOBAL_LEDGER_TOPIC) return
+
+    const authorPeerIdStr = event.detail.from.toString();
+
+    // Rate limit check for pubsub messages
+    if (!appContext.pubsubRateLimiter.isAllowed(authorPeerIdStr)) {
+      logger.warn(`Core: PubSub rate limit exceeded for peer ${authorPeerIdStr}. Ignoring message.`);
+      appContext.reputationManager.rateLimitExceeded(authorPeerIdStr);
+      return; // Ignore the message
+    }
 
     try {
       logger.debug('Core: Message received on topic')
@@ -247,6 +275,7 @@ export async function startNode(wallet, datastorePath) {
       }
 
       if (isValid) {
+        appContext.reputationManager.validTransaction(authorPeerIdStr);
         // If it's a valid REGISTER transaction, add the nullifier to the set
         if (message.type === 'REGISTER') {
           const { nullifier } = message.payload;
@@ -281,6 +310,7 @@ export async function startNode(wallet, datastorePath) {
         logger.info(`✅ Transaction processed (type: ${message.type}) from ${message.author}`)
 
       } else {
+        appContext.reputationManager.invalidTransaction(authorPeerIdStr);
         logger.warn(`Core: Received invalid transaction! Type: ${message.type}, Author: ${message.author}`)
       }
     } catch (error) {

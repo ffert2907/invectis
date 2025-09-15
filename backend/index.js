@@ -103,7 +103,7 @@ async function main() {
           const wsAddress = addresses.find(addr => addr.toString().includes('/ws'))
           if (wsAddress) {
             await clipboardy.write(wsAddress.toString())
-            logger.prod('\n✅ Adresse WebSocket copiée dans le presse-papiers!')
+            logger.prod('\n✅ WebSocket address copied to clipboard!')
           }
         } catch (error) {
           logger.warn('Could not copy to clipboard:', error.message)
@@ -404,6 +404,11 @@ function setupIPCListeners() {
                         providers.push(provider);
                     }
                     process.send({ type: 'result', id: message.id, data: providers.length });
+                    break;
+
+                case 'get-reputation':
+                    const score = appContext.reputationManager.getScore(message.data.peerId);
+                    process.send({ type: 'result', id: message.id, data: score });
                     break;
 
                 case 'stop':
