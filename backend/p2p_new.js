@@ -97,7 +97,7 @@ export async function createNode(datastorePath, reputationManager, options = {})
           timeout: 1000, // in ms,
         })
     ],
-    // connectionGater: createConnectionGater(reputationManager), // Temporarily disabled for debugging
+    connectionGater: createConnectionGater(reputationManager),
     connectionManager: {
       minConnections: 0,
       maxConnections: 100,

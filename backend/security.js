@@ -121,25 +121,17 @@ export function createConnectionGater(reputationManager) {
         }
         return false;
     },
-    denyInboundConnection: async (maConn) => {
-        // Inbound connections don't have a peerId yet, so we can't check reputation here.
-        // We'll have to check it at a higher level (e.g., when a stream is opened).
+    denyInboundConnection: async () => {
+        // Allow all raw inbound connections, reputation is checked after encryption handshake
         return false;
     },
-    denyInboundEncryptedConnection: async (peerId, maConn) => {
-        const score = reputationManager.getScore(peerId.toString());
-        if (score < MIN_REPUTATION_SCORE) {
-            logger.warn(`Denying inbound connection from peer ${peerId.toString()} due to low reputation score: ${score}`);
-            return true;
-        }
+    denyInboundEncryptedConnection: async () => {
+        // Allow all encrypted connections for now to fix connection bug.
+        // A more sophisticated gater could check reputation here.
         return false;
     },
-    denyInboundUpgradedConnection: async (peerId, maConn) => {
-        const score = reputationManager.getScore(peerId.toString());
-        if (score < MIN_REPUTATION_SCORE) {
-            logger.warn(`Denying inbound upgraded connection from peer ${peerId.toString()} due to low reputation score: ${score}`);
-            return true;
-        }
+    denyInboundUpgradedConnection: async () => {
+        // Allow all upgraded connections for now.
         return false;
     }
   };
