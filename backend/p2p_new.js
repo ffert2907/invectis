@@ -62,10 +62,11 @@ export async function createNode(datastorePath, reputationManager, options = {})
     },
     transports: [
       tcp(),
-      webSockets(),
-      circuitRelayTransport({
-        discoverRelays: 2 // Attempt to discover 2 relays
-      })
+      webSockets()
+      // DIagnostic: Temporarily disable circuit relay
+      // circuitRelayTransport({
+      //   discoverRelays: 2 // Attempt to discover 2 relays
+      // })
     ],
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
@@ -79,17 +80,18 @@ export async function createNode(datastorePath, reputationManager, options = {})
         emitSelf: false,
         debugName: 'gossipsub-debug'
       }),
-      dht: kadDHT({
-        protocol: '/ipfs/kad/1.0.0',
-        clientMode: false // Run in server mode to participate in the DHT
-      }),
-      relay: circuitRelayServer({
-        reservations: {
-          maxReservations: 15,
-          hopTimeout: 30 * 1000
-        }
-      }),
-      ping: ping()
+      // Diagnostic: Temporarily disable non-essential services
+      // dht: kadDHT({
+      //   protocol: '/ipfs/kad/1.0.0',
+      //   clientMode: false // Run in server mode to participate in the DHT
+      // }),
+      // relay: circuitRelayServer({
+      //   reservations: {
+      //     maxReservations: 15,
+      //     hopTimeout: 30 * 1000
+      //   }
+      // }),
+      // ping: ping()
     },
     peerDiscovery: [
         bootstrap({
