@@ -412,11 +412,18 @@ async function main() {
     logger.prod(`🚀 Server is running at http://localhost:${PORT}`);
     if (appContext.node) {
       logger.prod(`✅ Wallet loaded: ${walletFile}`);
-      const allAddresses = appContext.node.libp2p.getMultiaddrs().map(a => a.toString());
+      const peerId = appContext.node.libp2p.peerId.toString();
+      const allAddresses = appContext.node.libp2p.getMultiaddrs().map(a => {
+          const addrStr = a.toString();
+          if (addrStr.endsWith(peerId)) {
+              return addrStr;
+          }
+          return `${addrStr}/p2p/${peerId}`;
+      });
       const localWsAddress = allAddresses.find(a => a.includes('/ip4/127.0.0.1/') && a.includes('/ws'));
       if (localWsAddress) {
         logger.prod('------------------------------------------------------------------');
-        logger.prod('To connect a local client, use this address:');
+        logger.prod('To connect a local client, use this full multiaddress:');
         logger.prod(localWsAddress);
         logger.prod('------------------------------------------------------------------');
       }

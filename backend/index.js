@@ -94,16 +94,24 @@ async function main() {
       logger.info(`IPC: IPC listeners set up. Process will now idle.`);
     } else {
       // In console mode, run the interactive CLI
-      const addresses = node.libp2p.getMultiaddrs();
+      const peerId = node.libp2p.peerId.toString();
+      const addresses = node.libp2p.getMultiaddrs().map(addr => {
+        const addrStr = addr.toString();
+        if (addrStr.endsWith(peerId)) {
+            return addrStr;
+        }
+        return `${addrStr}/p2p/${peerId}`;
+      });
+
       logger.prod('\nListening addresses:')
-      addresses.forEach(addr => logger.prod(addr.toString()))
+      addresses.forEach(addr => logger.prod(addr))
 
        if (!peerAddress) {
         try {
-          const wsAddress = addresses.find(addr => addr.toString().includes('/ws'))
+          const wsAddress = addresses.find(addr => addr.includes('/ws'))
           if (wsAddress) {
-            await clipboardy.write(wsAddress.toString())
-            logger.prod('\n✅ WebSocket address copied to clipboard!')
+            await clipboardy.write(wsAddress)
+            logger.prod('\n✅ Full WebSocket multiaddress copied to clipboard!')
           }
         } catch (error) {
           logger.warn('Could not copy to clipboard:', error.message)
