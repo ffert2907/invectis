@@ -343,7 +343,11 @@ async function main() {
       }
       switch (type.toUpperCase()) {
         case 'PAYMENT':
-          await applyAutomaticBonus();
+          const bonusResult = await applyAutomaticBonus();
+          if (bonusResult && bonusResult.newHeads) {
+              appContext.dagHeads = bonusResult.newHeads;
+              logger.info('API: DAG heads updated with bonus transaction.');
+          }
           const recipientPeerId = getRecipientPeerId(payload.to);
           // For payments, we'll try to encrypt them.
           const recipientPublicKey = await appContext.node.getPublicKey(recipientPeerId);

@@ -218,7 +218,11 @@ function runInteractiveCLI(peerAddress) {
                 logger.info('--- Create a new Payment ---');
 
                 // Apply automatic bonus if eligible
-                await applyAutomaticBonus();
+                const bonusResult = await applyAutomaticBonus();
+                if (bonusResult && bonusResult.newHeads) {
+                    appContext.dagHeads = bonusResult.newHeads;
+                    logger.info('Core: DAG heads updated with bonus transaction.');
+                }
 
                 // Proceed with payment
                 const balance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
@@ -259,7 +263,7 @@ function runInteractiveCLI(peerAddress) {
                     await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, paymentMessageBytes);
                     logger.info('✅ Payment transaction published to the network!');
                   } catch (e) {
-                    logger.error('Error creating payment:', e.message);
+                    logger.error('Error creating payment:', e);
                   } finally {
                     askForTransaction();
                   }
@@ -351,7 +355,7 @@ function runInteractiveCLI(peerAddress) {
             logger.info('✅ Transaction published to the network!')
           }
         } catch (error) {
-          logger.error('Error sending transaction:', error.message)
+          logger.error('Error sending transaction:', error)
         }
         askForTransaction()
       })

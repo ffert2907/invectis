@@ -336,38 +336,43 @@ export async function applyAutomaticBonus(deps = {}) {
 
   const alreadyReceivedBonus = await _hasReceivedBonusToday(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
 
-  if (!alreadyReceivedBonus) {
-    logger.info('User has not received a daily bonus today. Calculating now...');
-    const bonusWalletBalance = await _calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
-    const bonusDailyTransactionSum = await _calculateDailyTransactionSum(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
-    const bonusPayload = createSetDailyBonusPayload(appContext.wallet, bonusWalletBalance, bonusDailyTransactionSum, 'Automatic Daily Bonus', 'ref-auto-bonus-001');
-
-    if (bonusPayload && bonusPayload.bonus > 0) {
-      logger.info(`✅ Awarding an automatic daily bonus of ${bonusPayload.bonus}.`);
-      const bonusTransactionToSign = {
-        parents: appContext.dagHeads.map(cid => cid.toString()),
-        author: appContext.wallet.peerId.toString(),
-        timestamp: Date.now(),
-        type: 'SETDAILYBONUS',
-        payload: bonusPayload
-      };
-      const signedBonusTransaction = await signTransaction(bonusTransactionToSign, appContext.wallet.sign);
-      const bonusCid = await appContext.j.add(signedBonusTransaction);
-
-      // Update DAG heads correctly
-      const parentStrings = signedBonusTransaction.parents || [];
-      const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()));
-      appContext.dagHeads = [...remainingHeads, bonusCid];
-
-      const bonusMessageBytes = new TextEncoder().encode(JSON.stringify(signedBonusTransaction));
-      await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, bonusMessageBytes);
-      logger.info('✅ Bonus transaction published to the network!');
-    } else {
-      logger.info('No automatic daily bonus to add at this time.');
-    }
-  } else {
+  if (alreadyReceivedBonus) {
     logger.info('User has already received a daily bonus today.');
+    return null;
   }
+
+  logger.info('User has not received a daily bonus today. Calculating now...');
+  const bonusWalletBalance = await _calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+  const bonusDailyTransactionSum = await _calculateDailyTransactionSum(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+  const bonusPayload = createSetDailyBonusPayload(appContext.wallet, bonusWalletBalance, bonusDailyTransactionSum, 'Automatic Daily Bonus', 'ref-auto-bonus-001');
+
+  if (!bonusPayload || bonusPayload.bonus <= 0) {
+    logger.info('No automatic daily bonus to add at this time.');
+    return null;
+  }
+
+  logger.info(`✅ Awarding an automatic daily bonus of ${bonusPayload.bonus}.`);
+  const bonusTransactionToSign = {
+    parents: appContext.dagHeads.map(cid => cid.toString()),
+    author: appContext.wallet.peerId.toString(),
+    timestamp: Date.now(),
+    type: 'SETDAILYBONUS',
+    payload: bonusPayload
+  };
+  const signedBonusTransaction = await signTransaction(bonusTransactionToSign, appContext.wallet.sign);
+  const bonusCid = await appContext.j.add(signedBonusTransaction);
+
+  // Calculate the new DAG heads
+  const parentStrings = signedBonusTransaction.parents || [];
+  const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()));
+  const newHeads = [...remainingHeads, bonusCid];
+
+  const bonusMessageBytes = new TextEncoder().encode(JSON.stringify(signedBonusTransaction));
+  await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, bonusMessageBytes);
+  logger.info('✅ Bonus transaction published to the network!');
+
+  // Return the new heads for the caller to update the context
+  return { newHeads };
 }
 
 /**
