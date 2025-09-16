@@ -402,8 +402,16 @@ async function main() {
       const cid = await appContext.j.add(signedTransaction);
       appContext.dagHeads = [...appContext.dagHeads, cid];
       const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
-      await appContext.node.libp2p.services.pubsub.publish('/invectis/global-ledger/1.0', messageBytes);
-      logger.info(`API: Published transaction of type ${type} with CID ${cid.toString()}`);
+      try {
+        await appContext.node.libp2p.services.pubsub.publish('/invectis/global-ledger/1.0', messageBytes);
+        logger.info(`API: Published transaction of type ${type} with CID ${cid.toString()}`);
+      } catch (err) {
+        if (err.name === 'PublishError') {
+            logger.warn(`Could not publish transaction from API (no peers available), but it has been saved locally. Error: ${err.message}`);
+        } else {
+            throw err;
+        }
+      }
       res.status(202).json({ message: 'Transaction published successfully', cid: cid.toString() });
     } catch (error) {
       logger.error(`API: Failed to publish transaction: ${error.message}`);

@@ -368,8 +368,16 @@ export async function applyAutomaticBonus(deps = {}) {
   const newHeads = [...remainingHeads, bonusCid];
 
   const bonusMessageBytes = new TextEncoder().encode(JSON.stringify(signedBonusTransaction));
-  await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, bonusMessageBytes);
-  logger.info('✅ Bonus transaction published to the network!');
+  try {
+    await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, bonusMessageBytes);
+    logger.info('✅ Bonus transaction published to the network!');
+  } catch (err) {
+    if (err.name === 'PublishError') {
+      logger.warn(`Could not publish bonus transaction to network (no peers available), but it has been saved locally. Error: ${err.message}`);
+    } else {
+      throw err;
+    }
+  }
 
   // Return the new heads for the caller to update the context
   return { newHeads };
