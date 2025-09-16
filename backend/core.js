@@ -82,7 +82,11 @@ export async function createAndSetAttestation(node, wallet) {
 }
 
 export async function startNode(wallet, datastorePath) {
-  logger.info('Core: Initializing P2P node with decoupled identity...');
+  if (wallet) {
+    logger.info('Core: Initializing P2P node with wallet...');
+  } else {
+    logger.info('Core: Initializing P2P node in relay/bootstrap mode (no wallet)...');
+  }
 
   // 1. Create the P2P node. It will generate its own ephemeral PeerID.
   const node = await createNode(datastorePath);
@@ -90,23 +94,24 @@ export async function startNode(wallet, datastorePath) {
   appContext.wallet = wallet;
   appContext.j = json(node);
 
-  // 2. Create and set the initial attestation.
-  appContext.attestation = await createAndSetAttestation(node, wallet);
+  if (wallet) {
+    // 2. Create and set the initial attestation.
+    appContext.attestation = await createAndSetAttestation(node, wallet);
 
-  // 3. Set the head provider for the P2P layer
-  node.setHeadProvider(() => {
-    // Return the last known head CID. A more complex strategy could be implemented here later.
-    if (appContext.dagHeads.length === 0) return null;
-    return appContext.dagHeads[appContext.dagHeads.length - 1];
-  });
+    // 3. Set the head provider for the P2P layer
+    node.setHeadProvider(() => {
+      if (appContext.dagHeads.length === 0) return null;
+      return appContext.dagHeads[appContext.dagHeads.length - 1];
+    });
 
-  // 4. Augment wallet object with a signing function for convenience.
-  appContext.wallet.sign = (data) => wallet.privateKey.sign(data);
+    // 4. Augment wallet object with a signing function for convenience.
+    appContext.wallet.sign = (data) => wallet.privateKey.sign(data);
 
-  const nodePeerId = node.libp2p.peerId;
-  logger.prod(`Core: Wallet ID: ${wallet.peerId.toString()}`);
-  logger.prod(`Core: Node ID:   ${nodePeerId.toString()}`);
-  logger.info('Core: Attestation created and set.');
+    const nodePeerId = node.libp2p.peerId;
+    logger.prod(`Core: Wallet ID: ${wallet.peerId.toString()}`);
+    logger.prod(`Core: Node ID:   ${nodePeerId.toString()}`);
+    logger.info('Core: Attestation created and set.');
+  }
 
   // 5. Start the node
   await node.start();
@@ -203,6 +208,10 @@ export async function startNode(wallet, datastorePath) {
         const cid = await appContext.j.add(message)
         logger.prod(`Core: Valid transaction received and stored. CID: ${cid.toString()}`)
 
+        // Pin the new CID to ensure it's replicated
+        appContext.node.pin(cid);
+        logger.info(`Core: Pinned new transaction CID: ${cid.toString()}`);
+
         // Update DAG heads
         const parentStrings = message.parents || []
         const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()))
@@ -262,14 +271,26 @@ export async function applyAutomaticBonus(deps = {}) {
       const signedBonusTransaction = await signTransaction(bonusTransactionToSign, appContext.wallet.sign);
       const bonusCid = await appContext.j.add(signedBonusTransaction);
 
+      // Pin the new bonus transaction CID
+      appContext.node.pin(bonusCid);
+      logger.info(`Core: Pinned bonus transaction CID: ${bonusCid.toString()}`);
+
       // Update DAG heads correctly
       const parentStrings = signedBonusTransaction.parents || [];
       const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()));
       appContext.dagHeads = [...remainingHeads, bonusCid];
 
       const bonusMessageBytes = new TextEncoder().encode(JSON.stringify(signedBonusTransaction));
-      await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, bonusMessageBytes);
-      logger.info('✅ Bonus transaction published to the network!');
+      try {
+        await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, bonusMessageBytes);
+        logger.info('✅ Bonus transaction published to the network!');
+      } catch (error) {
+        if (error.message.includes('NoPeersSubscribedToTopic')) {
+          logger.warn(`Core: Could not publish bonus transaction. No peers are subscribed to the topic. The transaction is still stored locally.`);
+        } else {
+          logger.error('Core: Error publishing bonus transaction:', error);
+        }
+      }
     } else {
       logger.info('No automatic daily bonus to add at this time.');
     }

@@ -65,21 +65,22 @@ async function main() {
   const walletToLoad = lastActiveWallet || WALLET_FILE;
   const walletFile = path.join(dataDir, walletToLoad);
 
-  // Try to load the determined wallet and start the node at boot.
+  // Try to load the determined wallet. If it fails, start in relay-only mode.
+  let wallet = null;
   try {
-    const wallet = await loadWalletFromFile(walletFile);
-    await startNode(wallet, datastorePath);
-    logger.prod(`✅ Wallet ${walletToLoad} loaded and P2P node started.`);
+    wallet = await loadWalletFromFile(walletFile);
+    logger.info(`✅ Wallet ${walletToLoad} loaded successfully.`);
   } catch (error) {
     if (error.code === 'ENOENT') {
-      logger.warn(`Default wallet not found. Server is running in API-only mode.`);
-      logger.warn('Create or activate a wallet via the API to start the P2P node.');
+      logger.warn(`Default wallet not found. Starting server in relay-only mode.`);
     } else {
-      // For other errors during initial load, we should probably exit.
       logger.error('A critical error occurred during initial wallet load:', error);
       process.exit(1);
     }
   }
+
+  // Start the node. It will be a full node if a wallet was loaded, otherwise relay-only.
+  await startNode(wallet, datastorePath);
 
   // Setup Express server (this now runs regardless of whether the node started)
   const app = express();
@@ -384,10 +385,21 @@ async function main() {
       };
       const signedTransaction = await signTransaction(transactionToSign, appContext.wallet.sign);
       const cid = await appContext.j.add(signedTransaction);
+      appContext.node.pin(cid);
+      logger.info(`API: Pinned new transaction CID: ${cid.toString()}`);
       appContext.dagHeads = [...appContext.dagHeads, cid];
       const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
-      await appContext.node.libp2p.services.pubsub.publish('/invectis/global-ledger/1.0', messageBytes);
-      logger.info(`API: Published transaction of type ${type} with CID ${cid.toString()}`);
+      try {
+        await appContext.node.libp2p.services.pubsub.publish('/invectis/global-ledger/1.0', messageBytes);
+        logger.info(`API: Published transaction of type ${type} with CID ${cid.toString()}`);
+      } catch (error) {
+        if (error.message.includes('NoPeersSubscribedToTopic')) {
+          logger.warn(`API: Could not publish transaction. No peers are subscribed to the topic. The transaction is still stored locally.`);
+        } else {
+          // For other errors, we let the main error handler catch it
+          throw error;
+        }
+      }
       res.status(202).json({ message: 'Transaction published successfully', cid: cid.toString() });
     } catch (error) {
       logger.error(`API: Failed to publish transaction: ${error.message}`);
@@ -397,17 +409,19 @@ async function main() {
 
   // Start server
   const server = app.listen(PORT, () => {
-    logger.prod(`🚀 Server is running at http://localhost:${PORT}`);
+    logger.prod(`🚀 API Server is running at http://localhost:${PORT}`);
     if (appContext.node) {
-      logger.prod(`✅ Wallet loaded: ${walletFile}`);
       const allAddresses = appContext.node.libp2p.getMultiaddrs().map(a => a.toString());
-      const localWsAddress = allAddresses.find(a => a.includes('/ip4/127.0.0.1/') && a.includes('/ws'));
-      if (localWsAddress) {
-        logger.prod('------------------------------------------------------------------');
-        logger.prod('To connect a local client, use this address:');
-        logger.prod(localWsAddress);
-        logger.prod('------------------------------------------------------------------');
+      logger.prod('------------------------------------------------------------------');
+      if (wallet) {
+        logger.prod(`✅ P2P Node started with Wallet: ${wallet.peerId.toString()}`);
+      } else {
+        logger.prod('✅ P2P Node started in Relay-Only Mode');
       }
+      logger.prod(`Node PeerId: ${appContext.node.libp2p.peerId.toString()}`);
+      logger.prod('Listening on addresses:');
+      allAddresses.forEach(addr => logger.prod(addr));
+      logger.prod('------------------------------------------------------------------');
     }
   });
 

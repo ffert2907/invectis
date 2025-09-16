@@ -17,6 +17,7 @@ import { kadDHT } from '@libp2p/kad-dht'
 import { bootstrap } from '@libp2p/bootstrap'
 import { ping } from '@libp2p/ping'
 import { CID } from 'multiformats/cid'
+import { ReplicationManager } from './replication.js'
 
 // A list of bootstrap nodes to connect to.
 // These are public nodes provided by the libp2p community.
@@ -145,7 +146,31 @@ export async function createNode(datastorePath) {
     start: false // We will start it manually
   })
 
+  // Instantiate the Replication Manager
+  const replicationManager = new ReplicationManager(libp2p);
+
+  // Wrap Helia's start/stop methods to also manage the replication manager
+  const originalStart = helia.start.bind(helia);
+  helia.start = async () => {
+    await originalStart();
+    replicationManager.start();
+  };
+
+  const originalStop = helia.stop.bind(helia);
+  helia.stop = async () => {
+    await originalStop();
+    replicationManager.stop();
+  };
+
   // 3. Add methods to the Helia instance for core logic interaction
+  helia.pin = (cid) => {
+    replicationManager.pin(cid);
+  };
+
+  helia.unpin = (cid) => {
+    replicationManager.unpin(cid);
+  };
+
   helia.setAttestation = (newAttestation) => {
     logger.info('P2P: Node attestation has been received and is now available.');
     currentAttestation = newAttestation;
