@@ -121,6 +121,7 @@ async function main() {
       if (peerAddress) {
         try {
           logger.info(`\nConnecting to ${peerAddress}...`)
+          logger.info(`DEBUG: Attempting to parse multiaddr: [${peerAddress}]`);
           const ma = multiaddr(peerAddress)
           await appContext.node.libp2p.dial(ma)
           logger.prod('✅ Successfully connected to peer.')
