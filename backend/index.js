@@ -260,16 +260,17 @@ function runInteractiveCLI(peerAddress) {
                     const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()));
                     appContext.dagHeads = [...remainingHeads, paymentCid];
                     const paymentMessageBytes = new TextEncoder().encode(JSON.stringify(signedPaymentTransaction));
-                    try {
-                        await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, paymentMessageBytes);
-                        logger.info('✅ Payment transaction published to the network!');
-                    } catch (err) {
-                        if (err.name === 'PublishError') {
-                            logger.warn(`Could not publish payment transaction to network (no peers available), but it has been saved locally. Error: ${err.message}`);
-                        } else {
-                            throw err;
-                        }
-                    }
+                    await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, paymentMessageBytes)
+                        .then(() => {
+                            logger.info('✅ Payment transaction published to the network!');
+                        })
+                        .catch(err => {
+                            if (err.name === 'PublishError') {
+                                logger.warn(`Could not publish payment transaction to network (no peers available), but it has been saved locally. Error: ${err.message}`);
+                            } else {
+                                throw err;
+                            }
+                        });
                   } catch (e) {
                     logger.error('Error creating payment:', e);
                   } finally {
@@ -359,16 +360,17 @@ function runInteractiveCLI(peerAddress) {
             appContext.dagHeads = [...remainingHeads, cid]
 
             const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction))
-            try {
-                await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, messageBytes);
-                logger.info('✅ Transaction published to the network!');
-            } catch (err) {
-                if (err.name === 'PublishError') {
-                    logger.warn(`Could not publish transaction to network (no peers available), but it has been saved locally. Error: ${err.message}`);
-                } else {
-                    throw err;
-                }
-            }
+            await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, messageBytes)
+                .then(() => {
+                    logger.info('✅ Transaction published to the network!');
+                })
+                .catch(err => {
+                    if (err.name === 'PublishError') {
+                        logger.warn(`Could not publish transaction to network (no peers available), but it has been saved locally. Error: ${err.message}`);
+                    } else {
+                        throw err;
+                    }
+                });
           }
         } catch (error) {
           logger.error('Error sending transaction:', error)
