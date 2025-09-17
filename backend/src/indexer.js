@@ -1,4 +1,4 @@
-import { logger } from './config.js';
+import { logger } from '../config.js';
 
 /**
  * The Indexer class is responsible for processing new transactions and
