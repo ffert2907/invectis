@@ -1,0 +1,7 @@
+2025-09-17 11:13:26 [32minfo[39m: [32mP2P: Generated ephemeral node PeerId: 12D3KooWJMXAQsbfhD94NcmybDWwooQnit4U592CsBz3GvY5z2Ud[39m
+2025-09-17 11:14:11 [32minfo[39m: [32mP2P: Generated ephemeral node PeerId: 12D3KooWAt38eizK9BDsZkpPm2uMc27VLMeULcAA5wMwmUWL9Ai5[39m
+2025-09-17 11:14:11 [32minfo[39m: [32m💾 Using LevelDB datastore at: /app/backend/data/verification-db[39m
+2025-09-17 11:14:11 [32minfo[39m: [32mReplicationManager: Initialized.[39m
+2025-09-17 11:14:11 [32minfo[39m: [32mLedgerManager: Added transaction to Helia with CID: bagaaieranflwg47iseyio7r455hwvna7up2nx2n7dbifcoiffjiugjaasv7q[39m
+2025-09-17 11:14:11 [32minfo[39m: [32mLedgerManager: Indexed transaction bagaaieranflwg47iseyio7r455hwvna7up2nx2n7dbifcoiffjiugjaasv7q[39m
+2025-09-17 11:14:11 [32minfo[39m: [32mLedgerManager: Updated heads. New head count: 1[39m

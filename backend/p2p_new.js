@@ -6,9 +6,9 @@ import { yamux } from '@chainsafe/libp2p-yamux'
 import { identify } from '@libp2p/identify'
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { createHelia } from 'helia'
-import { MemoryDatastore } from 'datastore-core'
 import { keys } from '@libp2p/crypto'
 import { peerIdFromPrivateKey } from '@libp2p/peer-id'
+import { createDatastore } from './adapters/datastore-adapter.js'
 import { pipe } from 'it-pipe'
 import { fromString as uint8ArrayFromString, toString as uint8ArrayToString } from 'uint8arrays'
 import { logger } from './config.js'
@@ -30,10 +30,10 @@ const BOOTSTRAP_NODES = [
 /**
  * Creates and configures a P2P node with Helia, WebSockets support, and a decoupled identity.
  * The node generates its own ephemeral PeerID and exposes a method to serve a wallet-signed attestation.
- * @param {string} datastorePath - The path to the local database directory.
+ * @param {object} datastoreConfig - The configuration for the datastore.
  * @returns {Promise<import('helia').Helia & { setAttestation: (attestation: object) => void, privateKey: import('@libp2p/interface-keys').PrivateKey }>} - A configured Helia instance with additional properties.
  */
-export async function createNode(datastorePath) {
+export async function createNode(datastoreConfig) {
   // This variable will hold the signed attestation and is captured in the handler's closure.
   let currentAttestation = null;
   let currentHeadProvider = () => null; // Default provider returns null
@@ -43,8 +43,9 @@ export async function createNode(datastorePath) {
   const peerId = await peerIdFromPrivateKey(nodeKey);
   logger.info(`P2P: Generated ephemeral node PeerId: ${peerId.toString()}`);
 
-  // Configure the local database for storage
-  const datastore = new MemoryDatastore()
+  // Configure the local database for storage using the adapter
+  const datastore = createDatastore(datastoreConfig);
+  await datastore.open(); // Explicitly open the datastore
 
   // Configure libp2p with WebSockets, DHT, and circuit relay
   const libp2pConfig = {
@@ -147,7 +148,7 @@ export async function createNode(datastorePath) {
   })
 
   // Instantiate the Replication Manager
-  const replicationManager = new ReplicationManager(libp2p);
+  const replicationManager = new ReplicationManager(helia);
 
   // Wrap Helia's start/stop methods to also manage the replication manager
   const originalStart = helia.start.bind(helia);
@@ -160,6 +161,8 @@ export async function createNode(datastorePath) {
   helia.stop = async () => {
     await originalStop();
     replicationManager.stop();
+    await datastore.close(); // Explicitly close the datastore
+    logger.info('P2P: Datastore closed.');
   };
 
   // 3. Add methods to the Helia instance for core logic interaction

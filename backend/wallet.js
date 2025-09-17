@@ -1,6 +1,6 @@
-import { readFile, writeFile } from 'fs/promises';
 import { logger } from './config.js';
 import { generateNullifier } from './identity.js';
+import { FileSystemKeyStoreAdapter } from './adapters/keystore-fs.js';
 import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 import { randomUUID } from 'crypto';
 import { TextEncoder } from 'util';
@@ -14,12 +14,12 @@ import { TextEncoder } from 'util';
  */
 export async function loadWalletFromFile(filePath, options = {}) {
   const { quiet = false } = options;
+  const keyStore = new FileSystemKeyStoreAdapter(filePath);
 
   if (!quiet) {
     logger.debug('Attempting to load wallet from:', filePath);
   }
-  const data = await readFile(filePath, 'utf8');
-  const walletData = JSON.parse(data);
+  const walletData = await keyStore.load();
 
   if (walletData.version !== '1.0' || !walletData.privateKey) {
     throw new Error('Invalid or outdated wallet format.');
@@ -56,14 +56,17 @@ export async function loadWalletFromFile(filePath, options = {}) {
  * @returns {Promise<object>} - Wallet data, including the private key.
  */
 export async function initializeWallet(filePath, rl) {
-  try {
-    return await loadWalletFromFile(filePath);
-  } catch (error) {
-    if (error.code !== 'ENOENT') {
+  const keyStore = new FileSystemKeyStoreAdapter(filePath);
+  const walletExists = await keyStore.exists();
+
+  if (walletExists) {
+    try {
+      return await loadWalletFromFile(filePath);
+    } catch (error) {
       logger.error('An unexpected error occurred while loading the wallet:', error);
       throw error;
     }
-
+  } else {
     logger.info('No valid wallet found. Starting interactive creation...');
     const askQuestion = (query) => new Promise(resolve => rl.question(query, resolve));
 
@@ -148,7 +151,8 @@ export async function createWallet(filePath, {
   };
 
   if (filePath) {
-    await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8');
+    const keyStore = new FileSystemKeyStoreAdapter(filePath);
+    await keyStore.save(walletData);
     logger.info(`✅ New wallet created and saved to ${filePath} (Account Type: ${accountType})`);
   }
 

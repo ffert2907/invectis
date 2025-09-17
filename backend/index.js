@@ -53,7 +53,12 @@ async function main() {
       : path.join(dataDir, `helia_${path.basename(walletFileName, '.dat')}`)
     logger.prod(`Using datastore: ${datastorePath}`)
 
-    await startNode(wallet, datastorePath)
+    const datastoreConfig = {
+      type: 'leveldb',
+      path: datastorePath
+    };
+
+    await startNode(wallet, datastoreConfig)
 
     const addresses = appContext.node.libp2p.getMultiaddrs()
     logger.prod('\nListening addresses:')
@@ -122,7 +127,7 @@ async function main() {
                   await applyAutomaticBonus();
 
                   // Proceed with payment
-                  const balance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+                  const balance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.ledgerManager);
 
                   logger.info(`Your current account balance is: ${balance}`);
                   if (balance <= 0) {
@@ -141,26 +146,24 @@ async function main() {
                     }
 
                     try {
-                      const nonce = await getNonce(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+                      const nonce = await getNonce(appContext.wallet.peerId.toString(), appContext.ledgerManager);
                       const paymentPayload = createPaymentPayload(appContext.wallet, recipientPeerId, amount, nonce, 'Payment', `ref-payment-${nonce}`);
 
                       const paymentTransactionToSign = {
-                        parents: appContext.dagHeads.map(cid => cid.toString()),
+                        parents: appContext.ledgerManager.getHeads().map(cid => cid.toString()),
                         author: appContext.wallet.peerId.toString(),
                         timestamp: Date.now(),
                         type,
                         payload: paymentPayload
                       };
                       const signedPaymentTransaction = await signTransaction(paymentTransactionToSign, appContext.wallet.sign);
-                      const paymentCid = await appContext.j.add(signedPaymentTransaction);
-                      const parentStrings = signedPaymentTransaction.parents || [];
-                      const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()));
-                      appContext.dagHeads = [...remainingHeads, paymentCid];
+                      const paymentCid = await appContext.ledgerManager.addTransaction(signedPaymentTransaction);
+                      appContext.dagHeads = appContext.ledgerManager.getHeads();
                       const paymentMessageBytes = new TextEncoder().encode(JSON.stringify(signedPaymentTransaction));
                       await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, paymentMessageBytes);
                       logger.info('✅ Payment transaction published to the network!');
                     } catch (e) {
-                      logger.error('Error creating payment:', e.message);
+                      logger.error('Error creating payment:', e);
                     } finally {
                       askForTransaction();
                     }
@@ -174,7 +177,7 @@ async function main() {
                   for (const vector of VECTORS) {
                     vectorValues[vector[0]] = Math.floor(Math.random() * 10)
                   }
-                  const nonce = await getNonce(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j)
+                  const nonce = await getNonce(appContext.wallet.peerId.toString(), appContext.ledgerManager)
                   payload = await createVectorPayload(appContext.wallet, recipientPeerId, vectorValues, nonce, 'Vector Transaction', `ref-vector-${nonce}`)
                   break
                 }
@@ -189,8 +192,8 @@ async function main() {
               case '4':
                 {
                   type = 'SETDAILYBONUS';
-                  const walletBalance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
-                  const dailyTransactionSum = await calculateDailyTransactionSum(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+                  const walletBalance = await calculateBalance(appContext.wallet.peerId.toString(), appContext.ledgerManager);
+                  const dailyTransactionSum = await calculateDailyTransactionSum(appContext.wallet.peerId.toString(), appContext.ledgerManager);
 
                   logger.info(`Current balance for bonus calculation: ${walletBalance}`);
                   logger.info(`Today's transaction sum for bonus calculation: ${dailyTransactionSum}`);
@@ -233,7 +236,7 @@ async function main() {
 
             if (payload) {
               const transactionToSign = {
-                parents: appContext.dagHeads.map(cid => cid.toString()),
+                parents: appContext.ledgerManager.getHeads().map(cid => cid.toString()),
                 author: appContext.wallet.peerId.toString(),
                 timestamp: Date.now(),
                 type,
@@ -241,11 +244,8 @@ async function main() {
               }
 
               const signedTransaction = await signTransaction(transactionToSign, appContext.wallet.sign)
-              const cid = await appContext.j.add(signedTransaction)
-
-              const parentStrings = signedTransaction.parents || []
-              const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()))
-              appContext.dagHeads = [...remainingHeads, cid]
+              const cid = await appContext.ledgerManager.addTransaction(signedTransaction);
+              appContext.dagHeads = appContext.ledgerManager.getHeads();
 
               const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction))
               await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, messageBytes)

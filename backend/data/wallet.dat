@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "type": "Ed25519",
+  "accountType": "individual",
+  "country": "XX",
+  "city": "Testville",
+  "nullifier": "eb4da81ee6c586d9d72a535534221d0ac13b8ec3f623bd99166ebea3d10d33b5",
+  "privateKey": "CAESQIxRYhS2eDBRJM64nf1cp7MMhuv2eIOJ4pt6p6NiANiawAnqEbu8HLSsE2IogTCNbMpmvb9eUhW3pzzgZoTN3oM=",
+  "created": "2025-09-17T14:38:22.086Z"
+}

@@ -81,7 +81,7 @@ export async function createAndSetAttestation(node, wallet) {
   return signedAttestation;
 }
 
-export async function startNode(wallet, datastorePath) {
+export async function startNode(wallet, datastoreConfig) {
   if (wallet) {
     logger.info('Core: Initializing P2P node with wallet...');
   } else {
@@ -89,7 +89,7 @@ export async function startNode(wallet, datastorePath) {
   }
 
   // 1. Create the P2P node. It will generate its own ephemeral PeerID.
-  const node = await createNode(datastorePath);
+  const node = await createNode(datastoreConfig);
   appContext.node = node;
   appContext.wallet = wallet;
   appContext.j = json(node);
@@ -172,8 +172,8 @@ export async function startNode(wallet, datastorePath) {
         const payload = message.payload;
         const amountToSpend = message.type === 'PAYMENT' ? payload.amount : payload.totalTime;
 
-        // 1. Check balance
-        const balance = await calculateBalance(authorId, appContext.dagHeads, appContext.j);
+        // 1. Check balance using the ledger manager
+        const balance = await calculateBalance(authorId, appContext.ledgerManager);
         if (balance < amountToSpend) {
           logger.warn(`Core: Insufficient funds for ${authorId}. Balance: ${balance}, required: ${amountToSpend}. Rejecting transaction.`);
           isValid = false;
@@ -181,7 +181,7 @@ export async function startNode(wallet, datastorePath) {
 
         // 2. Check nonce for double-spend prevention
         if (isValid) {
-          const expectedNonce = await getNonce(authorId, appContext.dagHeads, appContext.j);
+          const expectedNonce = await getNonce(authorId, appContext.ledgerManager);
           if (payload.nonce !== expectedNonce) {
             logger.warn(`Core: Invalid nonce for ${authorId}. Expected: ${expectedNonce}, got: ${payload.nonce}. Rejecting transaction.`);
             isValid = false;
@@ -205,18 +205,18 @@ export async function startNode(wallet, datastorePath) {
             }
         }
 
-        const cid = await appContext.j.add(message)
-        logger.prod(`Core: Valid transaction received and stored. CID: ${cid.toString()}`)
+        // Use the LedgerManager to add and index the transaction
+        const cid = await appContext.ledgerManager.addTransaction(message);
+        logger.prod(`Core: Valid transaction received, stored, and indexed. CID: ${cid.toString()}`);
 
-        // Pin the new CID to ensure it's replicated
+        // Pinning is now handled by the replication manager, but we can still explicitly pin.
         appContext.node.pin(cid);
         logger.info(`Core: Pinned new transaction CID: ${cid.toString()}`);
 
-        // Update DAG heads
-        const parentStrings = message.parents || []
-        const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()))
-        appContext.dagHeads = [...remainingHeads, cid]
-        logger.debug(`Core: New DAG heads: ${JSON.stringify(appContext.dagHeads.map(h => h.toString()))}`)
+        // DAG head management is now handled by the LedgerManager.
+        // We can sync the appContext heads if needed, or remove this entirely.
+        appContext.dagHeads = appContext.ledgerManager.getHeads();
+        logger.debug(`Core: Synced DAG heads from LedgerManager.`);
 
         // Store for API retrieval
         const formattedMessage = formatTransactionForFrontend(cid, message);
@@ -251,34 +251,32 @@ export async function applyAutomaticBonus(deps = {}) {
     calculateDailyTransactionSum: _calculateDailyTransactionSum = calculateDailyTransactionSum
   } = deps;
 
-  const alreadyReceivedBonus = await _hasReceivedBonusToday(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+  const alreadyReceivedBonus = await _hasReceivedBonusToday(appContext.wallet.peerId.toString(), appContext.ledgerManager);
 
   if (!alreadyReceivedBonus) {
     logger.info('User has not received a daily bonus today. Calculating now...');
-    const bonusWalletBalance = await _calculateBalance(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
-    const bonusDailyTransactionSum = await _calculateDailyTransactionSum(appContext.wallet.peerId.toString(), appContext.dagHeads, appContext.j);
+    const bonusWalletBalance = await _calculateBalance(appContext.wallet.peerId.toString(), appContext.ledgerManager);
+    const bonusDailyTransactionSum = await _calculateDailyTransactionSum(appContext.wallet.peerId.toString(), appContext.ledgerManager);
     const bonusPayload = createSetDailyBonusPayload(appContext.wallet, bonusWalletBalance, bonusDailyTransactionSum, 'Automatic Daily Bonus', 'ref-auto-bonus-001');
 
     if (bonusPayload && bonusPayload.bonus > 0) {
       logger.info(`✅ Awarding an automatic daily bonus of ${bonusPayload.bonus}.`);
       const bonusTransactionToSign = {
-        parents: appContext.dagHeads.map(cid => cid.toString()),
+        parents: appContext.ledgerManager.getHeads().map(cid => cid.toString()),
         author: appContext.wallet.peerId.toString(),
         timestamp: Date.now(),
         type: 'SETDAILYBONUS',
         payload: bonusPayload
       };
       const signedBonusTransaction = await signTransaction(bonusTransactionToSign, appContext.wallet.sign);
-      const bonusCid = await appContext.j.add(signedBonusTransaction);
+      const bonusCid = await appContext.ledgerManager.addTransaction(signedBonusTransaction);
 
       // Pin the new bonus transaction CID
       appContext.node.pin(bonusCid);
       logger.info(`Core: Pinned bonus transaction CID: ${bonusCid.toString()}`);
 
-      // Update DAG heads correctly
-      const parentStrings = signedBonusTransaction.parents || [];
-      const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()));
-      appContext.dagHeads = [...remainingHeads, bonusCid];
+      // DAG heads are now managed by the LedgerManager
+      appContext.dagHeads = appContext.ledgerManager.getHeads();
 
       const bonusMessageBytes = new TextEncoder().encode(JSON.stringify(signedBonusTransaction));
       try {

@@ -6,6 +6,8 @@ import { mkdir, readdir, readFile, writeFile } from 'fs/promises'
 import { logger } from './config.js'
 import { loadWalletFromFile, createWallet } from './wallet.js'
 import { startNode, appContext, applyAutomaticBonus, startTransactionQueueProcessor, createAndSetAttestation } from './core.js'
+import { LedgerManager } from './ledgerManager.js';
+import { LevelDBIndexAdapter } from './adapters/index-leveldb.js';
 import { VECTORS } from './vectors.js'
 import {
   signTransaction,
@@ -57,8 +59,13 @@ async function main() {
   logger.prod('Starting in Server Mode...');
 
   const dataDir = path.join(__dirname, 'data');
-  const datastorePath = path.join(dataDir, 'helia_server');
-  await mkdir(dataDir, { recursive: true });
+  const p2pDataPath = path.join(dataDir, 'p2p-data');
+  await mkdir(p2pDataPath, { recursive: true });
+
+  const datastoreConfig = {
+    type: 'leveldb',
+    path: p2pDataPath
+  };
 
   // Determine which wallet to load on startup
   const lastActiveWallet = await getLastActiveWallet();
@@ -80,7 +87,16 @@ async function main() {
   }
 
   // Start the node. It will be a full node if a wallet was loaded, otherwise relay-only.
-  await startNode(wallet, datastorePath);
+  await startNode(wallet, datastoreConfig);
+
+  // After the node starts, appContext.node is available. We can now init the ledger manager.
+  if (appContext.node) {
+    const indexer = new LevelDBIndexAdapter(appContext.node.datastore);
+    // The LedgerManager needs both the node and the json interface.
+    // appContext.j is created in core.js and holds the json interface.
+    appContext.ledgerManager = new LedgerManager(appContext.node, appContext.j, indexer);
+    logger.info('LedgerManager initialized with persistent indexer.');
+  }
 
   // Setup Express server (this now runs regardless of whether the node started)
   const app = express();
@@ -103,7 +119,7 @@ async function main() {
         try {
           const filePath = path.join(dataDir, file);
           const loadedWallet = await loadWalletFromFile(filePath, { quiet: true });
-          const balance = await calculateBalance(loadedWallet.peerId.toString(), appContext.dagHeads, appContext.j);
+          const balance = appContext.ledgerManager ? await calculateBalance(loadedWallet.peerId.toString(), appContext.ledgerManager) : 0;
           const walletInfo = {
             id: file,
             name: file.replace(/\.(json|dat)$/, ''),
@@ -137,8 +153,11 @@ async function main() {
     if (!peerId) {
       return res.status(400).json({ error: 'PeerId is required' });
     }
+    if (!appContext.ledgerManager) {
+      return res.status(503).json({ error: 'Ledger not ready.' });
+    }
     try {
-      const transactions = await getTransactions(peerId, appContext.dagHeads, appContext.j);
+      const transactions = await getTransactions(peerId, appContext.ledgerManager);
       res.json(transactions);
     } catch (error) {
       logger.error(`Failed to get transactions for ${peerId}: ${error.message}`);
@@ -178,9 +197,14 @@ async function main() {
       // If no node is active, activate it with the new wallet.
       if (!appContext.node) {
         logger.info('No active P2P node found. Activating node with new wallet...');
-        const datastorePath = path.join(dataDir, 'helia_server');
         const walletToActivate = await loadWalletFromFile(filePath);
-        await startNode(walletToActivate, datastorePath);
+        await startNode(walletToActivate, datastoreConfig); // Use the same datastore config
+
+        // Now that the node is started, initialize the ledger manager
+        const indexer = new LevelDBIndexAdapter(appContext.node.datastore);
+        appContext.ledgerManager = new LedgerManager(appContext.node, appContext.j, indexer);
+        logger.info('LedgerManager initialized for new node.');
+
         await saveLastActiveWallet(walletFileName); // Save the new wallet as the last active one
         logger.prod(`✅ Wallet ${walletFileName} activated and P2P node started.`);
       }
@@ -270,8 +294,13 @@ async function main() {
       // Case 1: Node is not running yet. Start it with the selected wallet.
       if (!appContext.node) {
         logger.info(`No active node found. Starting node with wallet: ${walletId}`);
-        const datastorePath = path.join(dataDir, 'helia_server');
-        await startNode(newWallet, datastorePath);
+        await startNode(newWallet, datastoreConfig); // Use the same datastore config
+
+        // Now that the node is started, initialize the ledger manager
+        const indexer = new LevelDBIndexAdapter(appContext.node.datastore);
+        appContext.ledgerManager = new LedgerManager(appContext.node, appContext.j, indexer);
+        logger.info('LedgerManager initialized for new node.');
+
         logger.prod(`✅ Wallet ${walletId} activated and P2P node started.`);
       }
       // Case 2: Node is already running. Hot-swap the wallet.
@@ -331,7 +360,7 @@ async function main() {
     if (!type || !payload) {
       return res.status(400).json({ error: 'Missing type or payload' });
     }
-    if (!appContext.node) {
+    if (!appContext.node || !appContext.ledgerManager) {
       return res.status(503).json({ error: 'Node not ready. Activate a wallet first.' });
     }
     try {
@@ -377,17 +406,22 @@ async function main() {
         return res.status(400).json({ error: 'Transaction could not be created. Check payload or conditions (e.g., daily bonus).' });
       }
       const transactionToSign = {
-        parents: appContext.dagHeads.map(cid => cid.toString()),
+        parents: appContext.ledgerManager.getHeads().map(cid => cid.toString()),
         author: appContext.wallet.peerId.toString(),
         timestamp: Date.now(),
         type: type.toUpperCase(),
         payload: transactionPayload
       };
       const signedTransaction = await signTransaction(transactionToSign, appContext.wallet.sign);
-      const cid = await appContext.j.add(signedTransaction);
+
+      // Use the ledger manager to add, index, and update heads
+      const cid = await appContext.ledgerManager.addTransaction(signedTransaction);
+      appContext.dagHeads = appContext.ledgerManager.getHeads(); // Sync heads
+
+      // Pin the transaction for replication
       appContext.node.pin(cid);
       logger.info(`API: Pinned new transaction CID: ${cid.toString()}`);
-      appContext.dagHeads = [...appContext.dagHeads, cid];
+
       const messageBytes = new TextEncoder().encode(JSON.stringify(signedTransaction));
       try {
         await appContext.node.libp2p.services.pubsub.publish('/invectis/global-ledger/1.0', messageBytes);
