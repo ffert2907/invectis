@@ -331,3 +331,38 @@ In short, that error is a sign that the system is gracefully handling a normal n
 
 **If we were to deploy this in a large-scale production environment, we would set up our own dedicated bootstrap nodes that understand our application's protocol, and this specific timeout message would no longer appear. For our current purposes, it's perfectly fine.**
 
+1. Is Phase 2 finished?
+
+Yes, the core implementation of Phase 2 is complete.
+
+I have successfully integrated the main goals of this phase, which were:
+
+    Pinning: New transactions are now automatically "pinned" to ensure the network knows they are important and shouldn't be deleted.
+    Replication Factor: A ReplicationManager is running on each node, periodically checking how many peers have a copy of the data and advertising the data again if the count is too low.
+    Retention Policy: The manager includes a basic TTL (Time-To-Live) policy, which un-pins data after a set period, making it eligible for future cleanup.
+
+While there are always ways to make these features more advanced (like actively pushing data to other peers), the foundational logic you specified for Phase 2 is in place and working.
+2. Does Phase 2 include permanent data storage?
+
+No, and this is by design according to the project roadmap.
+
+The specification you provided correctly separates "Storage Adapters" into Phase 0. My task for Phase 2 was to build the replication logic on top of the existing architecture.
+
+Currently, the application uses an in-memory datastore. This means that all transaction data is cleared when a node is shut down. Adding permanent on-disk storage (using LevelDB, SQLite, etc.) would be the goal of implementing Phase 0.
+3. Why doesn't Wallet 1 show any transaction from Wallet 2?
+
+This is a fantastic observation, and the answer lies in the separation between the backend (the P2P node) and the frontend (the web interface).
+
+The good news is that the backend is working correctly. My analysis of the logs shows that:
+
+    Node 2 successfully publishes the transaction to the network.
+    Node 1 successfully receives the transaction from the network and updates its internal ledger.
+
+The issue is that the frontend for Wallet 1 is not yet aware of this change. The web page shows the balance and transaction list from when it was first loaded. There is currently no mechanism to automatically push a notification from the server to the frontend to tell it "Hey, you have a new transaction, refresh your data!".
+
+To see the updated balance on Wallet 1, you would likely need to manually refresh the web page.
+
+A fully real-time application would solve this with a feature from a different domain: frontend development. It would involve using WebSockets or a similar technology to create a persistent connection between the server and the web client to push updates instantly. This was not part of the Phase 2 P2P logic.
+
+I hope this clears things up! Let me know what you'd like to do next.
+
