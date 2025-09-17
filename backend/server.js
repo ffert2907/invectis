@@ -8,7 +8,7 @@ import { loadWallet, createWallet, initializeWallet } from './wallet.js'
 import { startNode, appContext, applyAutomaticBonus, startTransactionQueueProcessor, createAndSetAttestation } from './core.js'
 import { FsKeyStore } from './src/implementations/fs/fs-keystore.js';
 import { FsIndexstore } from './src/implementations/fs/fs-indexstore.js';
-import { Indexer } from './indexer.js';
+import { Indexer } from './src/indexer.js';
 import { VECTORS } from './vectors.js'
 import {
   signTransaction,
