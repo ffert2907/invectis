@@ -6,7 +6,7 @@ import { yamux } from '@chainsafe/libp2p-yamux'
 import { identify } from '@libp2p/identify'
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { createHelia } from 'helia'
-import { MemoryDatastore } from 'datastore-core'
+import { FsBlockstore } from './src/implementations/fs/fs-blockstore.js';
 import { keys } from '@libp2p/crypto'
 import { peerIdFromPrivateKey } from '@libp2p/peer-id'
 import { pipe } from 'it-pipe'
@@ -44,7 +44,7 @@ export async function createNode(datastorePath) {
   logger.info(`P2P: Generated ephemeral node PeerId: ${peerId.toString()}`);
 
   // Configure the local database for storage
-  const datastore = new MemoryDatastore()
+  const datastore = new FsBlockstore(datastorePath);
 
   // Configure libp2p with WebSockets, DHT, and circuit relay
   const libp2pConfig = {
@@ -152,6 +152,7 @@ export async function createNode(datastorePath) {
   // Wrap Helia's start/stop methods to also manage the replication manager
   const originalStart = helia.start.bind(helia);
   helia.start = async () => {
+    await datastore.open();
     await originalStart();
     replicationManager.start();
   };
@@ -159,6 +160,7 @@ export async function createNode(datastorePath) {
   const originalStop = helia.stop.bind(helia);
   helia.stop = async () => {
     await originalStop();
+    await datastore.close();
     replicationManager.stop();
   };
 

@@ -1,4 +1,5 @@
 import { createNode } from './p2p.js'
+import { Indexer } from './indexer.js'
 import { signAttestation } from './wallet.js'
 import { verifyTransaction } from './transaction.js'
 import { calculateBalance, getNonce, hasReceivedBonusToday, calculateDailyTransactionSum } from './ledger.js'
@@ -19,6 +20,8 @@ export const appContext = {
   wallet: null,
   attestation: null, // To store the current wallet-node attestation
   j: null,
+  indexStore: null, // To store the index store instance
+  indexer: null, // To store the indexer instance
   dagHeads: [],
   receivedMessages: [],
   nullifiers: new Set(), // A set to store registered nullifiers
@@ -81,7 +84,7 @@ export async function createAndSetAttestation(node, wallet) {
   return signedAttestation;
 }
 
-export async function startNode(wallet, datastorePath) {
+export async function startNode(wallet, datastorePath, indexStore) {
   if (wallet) {
     logger.info('Core: Initializing P2P node with wallet...');
   } else {
@@ -93,6 +96,9 @@ export async function startNode(wallet, datastorePath) {
   appContext.node = node;
   appContext.wallet = wallet;
   appContext.j = json(node);
+  appContext.indexStore = indexStore;
+  appContext.indexer = new Indexer(node, indexStore);
+
 
   if (wallet) {
     // 2. Create and set the initial attestation.
@@ -207,6 +213,9 @@ export async function startNode(wallet, datastorePath) {
 
         const cid = await appContext.j.add(message)
         logger.prod(`Core: Valid transaction received and stored. CID: ${cid.toString()}`)
+
+        // Index the newly received valid transaction
+        await appContext.indexer.processTransaction(cid);
 
         // Pin the new CID to ensure it's replicated
         appContext.node.pin(cid);

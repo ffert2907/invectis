@@ -4,8 +4,11 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { mkdir, readdir, readFile, writeFile } from 'fs/promises'
 import { logger } from './config.js'
-import { loadWalletFromFile, createWallet } from './wallet.js'
+import { loadWallet, createWallet, initializeWallet } from './wallet.js'
 import { startNode, appContext, applyAutomaticBonus, startTransactionQueueProcessor, createAndSetAttestation } from './core.js'
+import { FsKeyStore } from './src/implementations/fs/fs-keystore.js';
+import { FsIndexstore } from './src/implementations/fs/fs-indexstore.js';
+import { Indexer } from './indexer.js';
 import { VECTORS } from './vectors.js'
 import {
   signTransaction,
@@ -57,30 +60,36 @@ async function main() {
   logger.prod('Starting in Server Mode...');
 
   const dataDir = path.join(__dirname, 'data');
-  const datastorePath = path.join(dataDir, 'helia_server');
-  await mkdir(dataDir, { recursive: true });
+  const walletDir = path.join(dataDir, 'wallets');
+  const blockstorePath = path.join(dataDir, 'blockstore');
+  const indexstorePath = path.join(dataDir, 'indexstore');
+  await mkdir(walletDir, { recursive: true });
+
+  // Setup stores
+  const walletStore = new FsKeyStore(walletDir);
+  const indexStore = new FsIndexstore(indexstorePath);
+  await indexStore.open(); // Open the index store
 
   // Determine which wallet to load on startup
-  const lastActiveWallet = await getLastActiveWallet();
-  const walletToLoad = lastActiveWallet || WALLET_FILE;
-  const walletFile = path.join(dataDir, walletToLoad);
+  const lastActiveWalletKey = await getLastActiveWallet();
+  const walletKeyToLoad = lastActiveWalletKey || 'default_wallet';
 
   // Try to load the determined wallet. If it fails, start in relay-only mode.
   let wallet = null;
   try {
-    wallet = await loadWalletFromFile(walletFile);
-    logger.info(`✅ Wallet ${walletToLoad} loaded successfully.`);
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      logger.warn(`Default wallet not found. Starting server in relay-only mode.`);
+    wallet = await loadWallet(walletStore, walletKeyToLoad);
+    if (wallet) {
+      logger.info(`✅ Wallet ${walletKeyToLoad} loaded successfully.`);
     } else {
+      logger.warn(`Default wallet not found. Starting server in relay-only mode.`);
+    }
+  } catch (error) {
       logger.error('A critical error occurred during initial wallet load:', error);
       process.exit(1);
-    }
   }
 
   // Start the node. It will be a full node if a wallet was loaded, otherwise relay-only.
-  await startNode(wallet, datastorePath);
+  await startNode(wallet, blockstorePath, indexStore);
 
   // Setup Express server (this now runs regardless of whether the node started)
   const app = express();
@@ -94,19 +103,19 @@ async function main() {
 
   // GET /wallets
   app.get('/wallets', async (req, res) => {
-    const dataDir = path.join(__dirname, 'data');
+    const walletDir = path.join(__dirname, 'data', 'wallets');
     try {
-      const files = await readdir(dataDir);
-      const walletFiles = files.filter(file => file.endsWith('.json') || file.endsWith('.dat'));
+      const files = await readdir(walletDir);
+      const walletFiles = files.filter(file => file.endsWith('.json'));
       const wallets = [];
       for (const file of walletFiles) {
+        const walletKey = file.replace('.json', '');
         try {
-          const filePath = path.join(dataDir, file);
-          const loadedWallet = await loadWalletFromFile(filePath, { quiet: true });
+          const loadedWallet = await loadWallet(walletStore, walletKey, { quiet: true });
           const balance = await calculateBalance(loadedWallet.peerId.toString(), appContext.dagHeads, appContext.j);
           const walletInfo = {
-            id: file,
-            name: file.replace(/\.(json|dat)$/, ''),
+            id: walletKey,
+            name: walletKey, // Or store a name inside the wallet data
             address: loadedWallet.peerId.toString(),
             balance: {
               main: balance,
@@ -138,7 +147,8 @@ async function main() {
       return res.status(400).json({ error: 'PeerId is required' });
     }
     try {
-      const transactions = await getTransactions(peerId, appContext.dagHeads, appContext.j);
+      // Now uses the appContext which holds the indexStore instance
+      const transactions = await getTransactions(peerId, appContext);
       res.json(transactions);
     } catch (error) {
       logger.error(`Failed to get transactions for ${peerId}: ${error.message}`);
@@ -157,10 +167,8 @@ async function main() {
       countryOfBirth,
       cityOfBirth
     } = req.body;
-    const safeName = (name || '').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    const walletFileName = `${safeName || 'wallet'}_${Date.now()}.json`;
-    const dataDir = path.join(__dirname, 'data');
-    const filePath = path.join(dataDir, walletFileName);
+    const walletKey = (name || `wallet_${Date.now()}`).replace(/[^a-z0-9]/gi, '_').toLowerCase();
+
     try {
       const walletDetails = {
         accountType,
@@ -173,16 +181,15 @@ async function main() {
       const {
         privateKey,
         ...walletData
-      } = await createWallet(filePath, walletDetails);
+      } = await createWallet(walletStore, walletKey, walletDetails);
 
       // If no node is active, activate it with the new wallet.
       if (!appContext.node) {
         logger.info('No active P2P node found. Activating node with new wallet...');
-        const datastorePath = path.join(dataDir, 'helia_server');
-        const walletToActivate = await loadWalletFromFile(filePath);
-        await startNode(walletToActivate, datastorePath);
-        await saveLastActiveWallet(walletFileName); // Save the new wallet as the last active one
-        logger.prod(`✅ Wallet ${walletFileName} activated and P2P node started.`);
+        const walletToActivate = await loadWallet(walletStore, walletKey);
+        await startNode(walletToActivate, blockstorePath, indexStore);
+        await saveLastActiveWallet(walletKey); // Save the new wallet as the last active one
+        logger.prod(`✅ Wallet ${walletKey} activated and P2P node started.`);
       }
 
       // For individual accounts, queue a registration transaction to be published.
@@ -212,13 +219,13 @@ async function main() {
       }
       const createdWalletForFrontend = {
         ...walletData,
-        id: walletFileName,
+        id: walletKey,
         name: name,
         balance: {
           main: 0,
           vectors: Array(9).fill(0)
         },
-        address: `addr...${walletFileName.slice(0, 8)}`
+        address: walletData.peerId.toString()
       };
       delete createdWalletForFrontend.privateKey;
       res.status(201).json(createdWalletForFrontend);
@@ -237,15 +244,13 @@ async function main() {
     if (!name || !walletData) {
       return res.status(400).json({ error: 'Missing name or walletData' });
     }
-    const dataDir = path.join(__dirname, 'data');
-    const safeName = name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
-    const filePath = path.join(dataDir, safeName);
+    const walletKey = name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
     try {
       const parsedData = JSON.parse(walletData);
       if (parsedData.version !== '1.0' || !parsedData.privateKey) {
         throw new Error('Invalid wallet data format for import.');
       }
-      await writeFile(filePath, JSON.stringify(parsedData, null, 2), 'utf8');
+      await walletStore.save(walletKey, parsedData);
       res.status(200).json({ message: 'Wallet imported successfully' });
     } catch (error) {
       logger.error(`Failed to import wallet: ${error.message}`);
@@ -255,23 +260,22 @@ async function main() {
 
   // POST /wallets/activate
   app.post('/wallets/activate', async (req, res) => {
-    const { walletId } = req.body;
+    const { walletId } = req.body; // Here walletId is the key
     if (!walletId) {
       return res.status(400).json({ error: 'walletId is required' });
     }
 
-    const dataDir = path.join(__dirname, 'data');
-    const walletFile = path.join(dataDir, walletId);
-
     try {
-      // Load the new wallet from file
-      const newWallet = await loadWalletFromFile(walletFile);
+      // Load the new wallet from the store
+      const newWallet = await loadWallet(walletStore, walletId);
+      if (!newWallet) {
+        return res.status(404).json({ error: `Wallet with id ${walletId} not found.`});
+      }
 
       // Case 1: Node is not running yet. Start it with the selected wallet.
       if (!appContext.node) {
         logger.info(`No active node found. Starting node with wallet: ${walletId}`);
-        const datastorePath = path.join(dataDir, 'helia_server');
-        await startNode(newWallet, datastorePath);
+        await startNode(newWallet, blockstorePath, indexStore);
         logger.prod(`✅ Wallet ${walletId} activated and P2P node started.`);
       }
       // Case 2: Node is already running. Hot-swap the wallet.
@@ -385,6 +389,12 @@ async function main() {
       };
       const signedTransaction = await signTransaction(transactionToSign, appContext.wallet.sign);
       const cid = await appContext.j.add(signedTransaction);
+
+      // Index the new transaction
+      if (appContext.indexer) {
+        await appContext.indexer.processTransaction(cid);
+      }
+
       appContext.node.pin(cid);
       logger.info(`API: Pinned new transaction CID: ${cid.toString()}`);
       appContext.dagHeads = [...appContext.dagHeads, cid];
@@ -432,6 +442,7 @@ async function main() {
     if (appContext.node) {
       await appContext.node.stop();
     }
+    await indexStore.close(); // Close the index store
     process.exit(0);
   });
 }

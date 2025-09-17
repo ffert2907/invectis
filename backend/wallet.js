@@ -1,4 +1,3 @@
-import { readFile, writeFile } from 'fs/promises';
 import { logger } from './config.js';
 import { generateNullifier } from './identity.js';
 import { peerIdFromPrivateKey } from '@libp2p/peer-id';
@@ -6,20 +5,25 @@ import { randomUUID } from 'crypto';
 import { TextEncoder } from 'util';
 
 /**
- * Loads a wallet from a file.
- * @param {string} filePath - Path to the wallet file.
+ * Loads a wallet using a KeyStoreAdapter.
+ * @param {import('./src/adapters/keystore-adapter.js').KeyStoreAdapter} keyStore - The keystore to use.
+ * @param {string} key - The key for the wallet data.
  * @param {object} [options] - Optional settings.
  * @param {boolean} [options.quiet=false] - If true, suppress verbose logs.
- * @returns {Promise<{privateKey: import('@libp2p/interface-keys').PrivateKey, accountType: string, country: string, city: string, nullifier: string}>} - Wallet data.
+ * @returns {Promise<{privateKey: import('@libp2p/interface-keys').PrivateKey, accountType: string, country: string, city: string, nullifier: string}|null>} - Wallet data or null if not found.
  */
-export async function loadWalletFromFile(filePath, options = {}) {
+export async function loadWallet(keyStore, key, options = {}) {
   const { quiet = false } = options;
 
   if (!quiet) {
-    logger.debug('Attempting to load wallet from:', filePath);
+    logger.debug('Attempting to load wallet for key:', key);
   }
-  const data = await readFile(filePath, 'utf8');
-  const walletData = JSON.parse(data);
+
+  const walletData = await keyStore.load(key);
+
+  if (!walletData) {
+    return null;
+  }
 
   if (walletData.version !== '1.0' || !walletData.privateKey) {
     throw new Error('Invalid or outdated wallet format.');
@@ -51,58 +55,56 @@ export async function loadWalletFromFile(filePath, options = {}) {
 
 /**
  * Initializes or loads a wallet, with interactive creation as a fallback.
- * @param {string} filePath - Path to the wallet file.
+ * @param {import('./src/adapters/keystore-adapter.js').KeyStoreAdapter} keyStore - The keystore to use for loading/saving.
+ * @param {string} key - The key to use for the wallet.
  * @param {import('readline').Interface} rl - The readline interface for user input.
  * @returns {Promise<object>} - Wallet data, including the private key.
  */
-export async function initializeWallet(filePath, rl) {
-  try {
-    return await loadWalletFromFile(filePath);
-  } catch (error) {
-    if (error.code !== 'ENOENT') {
-      logger.error('An unexpected error occurred while loading the wallet:', error);
-      throw error;
-    }
-
-    logger.info('No valid wallet found. Starting interactive creation...');
-    const askQuestion = (query) => new Promise(resolve => rl.question(query, resolve));
-
-    const accountType = await (async () => {
-      let choice;
-      do {
-        choice = await askQuestion('Choose account type (1: Individual, 2: Enterprise): ');
-      } while (choice !== '1' && choice !== '2');
-      return choice === '1' ? 'individual' : 'enterprise';
-    })();
-
-    let walletDetails = { accountType };
-
-    if (accountType === 'individual') {
-      logger.info('\nPlease provide your personal information for your individual wallet:');
-      const givenName = await askQuestion('  - First Name: ');
-      const familyName = await askQuestion('  - Last Name: ');
-      const dateOfBirth = await askQuestion('  - Date of Birth (YYYY-MM-DD): ');
-      const countryOfBirth = await askQuestion('  - 2-letter Country Code of Birth (e.g., FR): ');
-      const cityOfBirth = await askQuestion('  - City of Birth: ');
-      walletDetails = { ...walletDetails, givenName, familyName, dateOfBirth, countryOfBirth, cityOfBirth };
-    } else {
-        logger.info('\nPlease provide details for your enterprise wallet:');
-        const country = await askQuestion('  - Country of Operation: ');
-        const city = await askQuestion('  - City of Operation: ');
-        walletDetails = { ...walletDetails, countryOfBirth: country, cityOfBirth: city };
-    }
-
-    return createWallet(filePath, walletDetails);
+export async function initializeWallet(keyStore, key, rl) {
+  const existingWallet = await loadWallet(keyStore, key);
+  if (existingWallet) {
+    return existingWallet;
   }
+
+  logger.info('No valid wallet found. Starting interactive creation...');
+  const askQuestion = (query) => new Promise(resolve => rl.question(query, resolve));
+
+  const accountType = await (async () => {
+    let choice;
+    do {
+      choice = await askQuestion('Choose account type (1: Individual, 2: Enterprise): ');
+    } while (choice !== '1' && choice !== '2');
+    return choice === '1' ? 'individual' : 'enterprise';
+  })();
+
+  let walletDetails = { accountType };
+
+  if (accountType === 'individual') {
+    logger.info('\nPlease provide your personal information for your individual wallet:');
+    const givenName = await askQuestion('  - First Name: ');
+    const familyName = await askQuestion('  - Last Name: ');
+    const dateOfBirth = await askQuestion('  - Date of Birth (YYYY-MM-DD): ');
+    const countryOfBirth = await askQuestion('  - 2-letter Country Code of Birth (e.g., FR): ');
+    const cityOfBirth = await askQuestion('  - City of Birth: ');
+    walletDetails = { ...walletDetails, givenName, familyName, dateOfBirth, countryOfBirth, cityOfBirth };
+  } else {
+      logger.info('\nPlease provide details for your enterprise wallet:');
+      const country = await askQuestion('  - Country of Operation: ');
+      const city = await askQuestion('  - City of Operation: ');
+      walletDetails = { ...walletDetails, countryOfBirth: country, cityOfBirth: city };
+  }
+
+  return createWallet(keyStore, key, walletDetails);
 }
 
 /**
  * Creates a new wallet, generating a nullifier for individual accounts.
- * @param {string} filePath - The path to save the wallet file.
+ * @param {import('./src/adapters/keystore-adapter.js').KeyStoreAdapter} keyStore - The keystore to save the wallet to.
+ * @param {string} key - The key to save the wallet under.
  * @param {object} details - The details for the new wallet.
  * @returns {Promise<object>} - The created wallet data, including the private key.
  */
-export async function createWallet(filePath, {
+export async function createWallet(keyStore, key, {
   accountType,
   givenName,
   familyName,
@@ -147,9 +149,9 @@ export async function createWallet(filePath, {
     created: new Date().toISOString()
   };
 
-  if (filePath) {
-    await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8');
-    logger.info(`✅ New wallet created and saved to ${filePath} (Account Type: ${accountType})`);
+  if (keyStore) {
+    await keyStore.save(key, walletData);
+    logger.info(`✅ New wallet created and saved for key: ${key} (Account Type: ${accountType})`);
   }
 
   // Remove the base64 private key from the data we will merge into the final object.
