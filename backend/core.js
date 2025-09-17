@@ -8,7 +8,7 @@ import { peerIdFromString } from '@libp2p/peer-id'
 import { createSetDailyBonusPayload, signTransaction } from './transaction.js';
 import { TextEncoder } from 'util';
 import { json } from '@helia/json'
-import { logger } from './config.js'
+import { logger } from './src/config.js'
 import { CID } from 'multiformats/cid'
 
 // Topic GossipSub pour le registre global
