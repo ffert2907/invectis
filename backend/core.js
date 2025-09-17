@@ -152,7 +152,7 @@ export async function startNode(wallet, datastorePath) {
     try {
       logger.debug('Core: Message received on topic')
       const message = JSON.parse(new TextDecoder().decode(event.detail.data))
-      logger.debug('Core: Message decoded:', message)
+      logger.debug(`Core: Message decoded: ${JSON.stringify(message, null, 2)}`)
 
       const authorPeerId = peerIdFromString(message.author)
       let isValid = await verifyTransaction(message, authorPeerId)
@@ -216,7 +216,7 @@ export async function startNode(wallet, datastorePath) {
         const parentStrings = message.parents || []
         const remainingHeads = appContext.dagHeads.filter(h => !parentStrings.includes(h.toString()))
         appContext.dagHeads = [...remainingHeads, cid]
-        logger.debug('Core: New DAG heads:', appContext.dagHeads.map(h => h.toString()))
+        logger.debug(`Core: New DAG heads: ${JSON.stringify(appContext.dagHeads.map(h => h.toString()))}`)
 
         // Store for API retrieval
         const formattedMessage = formatTransactionForFrontend(cid, message);
