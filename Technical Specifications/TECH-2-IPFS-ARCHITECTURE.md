@@ -316,3 +316,18 @@ interface P2PStorageAPI {
 * Enable optional full-node mode on desktop with unlimited retention.
 
 
+## Test Conclusion and understandings : 
+TimeoutError message. it's about how P2P networks operate.
+
+Here’s a simple breakdown of what's happening and why it's not a problem:
+
+    What the Code is Doing: When your node starts up, one of the first things it does is try to sync with the network. It does this by asking a few well-known public "bootstrap" nodes for the latest state of the ledger.
+
+    Why the Timeout Happens: The public bootstrap nodes are like a general directory for the entire P2P network; they help new nodes find others. However, they don't know anything about our specific application or its custom protocols (like the one we use to ask for the ledger's head). So, when your node asks them for our specific data, they don't have an answer, and the request eventually "times out".
+
+    How the Code Handles It: This is expected behavior. I've written the code to anticipate this timeout. It catches the TimeoutError, logs the friendly warning you see (Core: Could not get head from bootstrap peer...), and then continues on without any issues. It doesn't stop your node from connecting to other peers from our application or from functioning correctly.
+
+In short, that error is a sign that the system is gracefully handling a normal network event. It's not a bug or a crash.
+
+**If we were to deploy this in a large-scale production environment, we would set up our own dedicated bootstrap nodes that understand our application's protocol, and this specific timeout message would no longer appear. For our current purposes, it's perfectly fine.**
+
