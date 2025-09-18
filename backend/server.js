@@ -418,17 +418,31 @@ async function main() {
   // Graceful shutdown
   const shutdown = async (path_to_save) => {
     logger.info('Shutting down server and P2P node...');
-    if (appContext.node) {
-      if (path_to_save) {
+
+    // Save state first
+    if (appContext.node && path_to_save) {
         await saveDagHeads(path_to_save);
-      }
-      await appContext.node.stop();
     }
-    if (appContext.pinManager) await appContext.pinManager.close();
+
+    // Stop the P2P node
+    if (appContext.node) {
+        await appContext.node.stop();
+    }
+    if (appContext.pinManager) {
+        await appContext.pinManager.close();
+    }
+
+    // Close the server and exit
     server.close(() => {
-      logger.info('Server closed.');
-      process.exit(0);
+        logger.info('Server closed gracefully.');
+        process.exit(0);
     });
+
+    // Force exit after a delay in case of hanging connections
+    setTimeout(() => {
+        logger.warn('Server did not close gracefully, forcing exit.');
+        process.exit(1);
+    }, 2000);
   };
 
   process.on('SIGINT', () => shutdown(datastorePath));
