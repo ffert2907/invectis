@@ -26,6 +26,7 @@ const BOOTSTRAP_NODES = [
 ];
 
 export async function createNode(datastorePath, reputationManager, options = {}) {
+  const { directPeerInfo } = options;
   let currentAttestation = null;
   let currentHeadProvider = () => null;
   const publicKeyCache = new Map();
@@ -45,7 +46,11 @@ export async function createNode(datastorePath, reputationManager, options = {})
     streamMuxers: [yamux()],
     services: {
       identify: identify(),
-      pubsub: gossipsub({ allowPublishToZeroPeers: true }),
+      pubsub: gossipsub({
+        allowPublishToZeroPeers: true,
+        strictSigning: false,
+        directPeers: directPeerInfo ? [directPeerInfo] : []
+      }),
       dht: kadDHT({ clientMode: false }),
       relay: circuitRelayServer({ reservations: { maxReservations: 15 } }),
       ping: ping()

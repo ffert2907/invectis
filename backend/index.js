@@ -51,7 +51,10 @@ async function main() {
       : path.join(dataDir, `helia_${path.basename(walletFileName, '.dat')}`);
     logger.prod(`Using datastore: ${datastorePath}`);
 
-    const node = await startNode(wallet, datastorePath);
+    const directPeerInfo = peerAddress
+      ? { id: peerIdFromString(multiaddr(peerAddress).getPeerId()), addrs: [multiaddr(peerAddress)] }
+      : null;
+    const node = await startNode(wallet, datastorePath, { directPeerInfo });
 
     if (!isFork) {
       const addresses = node.libp2p.getMultiaddrs();

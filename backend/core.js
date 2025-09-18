@@ -47,13 +47,13 @@ export async function createAndSetAttestation(node, wallet) {
   return signedAttestation;
 }
 
-export async function startNode(wallet, datastorePath) {
+export async function startNode(wallet, datastorePath, options = {}) {
   logger.info('Core: Initializing P2P node...');
   appContext.reputationManager = new ReputationManager();
   appContext.pubsubRateLimiter = new RateLimiter(0.5, 2);
   logger.info('Core: Security components initialized.');
 
-  const node = await createNode(datastorePath, appContext.reputationManager);
+  const node = await createNode(datastorePath, appContext.reputationManager, options);
   appContext.node = node;
   appContext.wallet = wallet;
   appContext.j = json(node);
@@ -93,7 +93,55 @@ export async function startNode(wallet, datastorePath) {
   logger.prod(`Core: Subscribed to topic: ${GLOBAL_LEDGER_TOPIC}`);
 
   node.libp2p.services.pubsub.addEventListener('message', async (event) => {
-      // Message processing logic...
+    try {
+      const tx = JSON.parse(new TextDecoder().decode(event.detail.data));
+      logger.info(`Core: Received transaction of type ${tx.type} from network.`);
+
+      // Basic validation
+      if (!tx || !tx.author) {
+        logger.warn('Core: Received invalid transaction data.');
+        return;
+      }
+
+      // Prevent processing our own messages
+      if (tx.author === appContext.wallet.peerId.toString()) {
+        logger.info('Core: Ignoring our own broadcasted message.');
+        return;
+      }
+
+      const authorPeerId = peerIdFromString(tx.author);
+      const isValid = await verifyTransaction(tx, authorPeerId);
+
+      if (!isValid) {
+        logger.warn(`Core: Invalid signature for transaction from ${tx.author}. Discarding.`);
+        // Optional: Penalize the sender
+        // appContext.reputationManager.penalize(authorPeerId, 10);
+        return;
+      }
+
+      // Add to Helia to get its CID and store it.
+      const cid = await appContext.j.add(tx);
+      const cidString = cid.toString();
+
+      if (appContext.receivedMessages.includes(cidString)) {
+        logger.info(`Core: Already processed transaction ${cidString}. Ignoring.`);
+        return;
+      }
+      appContext.receivedMessages.push(cidString);
+
+      // Update DAG heads
+      appContext.dagHeads = [...appContext.dagHeads.filter(h => !tx.parents.includes(h.toString())), cid];
+
+      logger.prod(`✅ Core: Valid transaction ${cidString} of type ${tx.type} from ${tx.author} applied to ledger.`);
+
+      // Optional: If a UI is connected, send an update
+      // if (global.frontendUpdateCallback) {
+      //     global.frontendUpdateCallback(await formatTransactionForFrontend(tx, cid));
+      // }
+
+    } catch (error) {
+      logger.error('Core: Error processing received message:', error);
+    }
   });
 
   return node;
