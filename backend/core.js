@@ -1,3 +1,4 @@
+import { promises as fs } from 'fs';
 import { createNode } from './p2p_new.js'
 import { signAttestation } from './wallet.js'
 import { verifyTransaction } from './transaction.js'
@@ -47,7 +48,44 @@ export async function createAndSetAttestation(node, wallet) {
   return signedAttestation;
 }
 
+export async function saveDagHeads(datastorePath) {
+  if (!appContext.dagHeads || appContext.dagHeads.length === 0) {
+    logger.info('Core: No DAG heads to save.');
+    return;
+  }
+  const headsPath = path.join(datastorePath, 'dag_heads.json');
+  const headsAsString = appContext.dagHeads.map(cid => cid.toString());
+  try {
+    await fs.writeFile(headsPath, JSON.stringify(headsAsString, null, 2));
+    logger.info(`Core: Successfully saved ${headsAsString.length} DAG heads to ${headsPath}`);
+  } catch (error) {
+    logger.error(`Core: Failed to save DAG heads to ${headsPath}:`, error);
+  }
+}
+
+export async function loadDagHeads(datastorePath) {
+  const headsPath = path.join(datastorePath, 'dag_heads.json');
+  try {
+    const headsData = await fs.readFile(headsPath, 'utf8');
+    const headsAsString = JSON.parse(headsData);
+    if (Array.isArray(headsAsString)) {
+      appContext.dagHeads = headsAsString.map(str => CID.parse(str));
+      logger.info(`Core: Successfully loaded ${appContext.dagHeads.length} DAG heads from ${headsPath}`);
+    }
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      logger.info(`Core: No DAG heads file found at ${headsPath}. Starting with a fresh ledger.`);
+      appContext.dagHeads = [];
+    } else {
+      logger.error(`Core: Failed to load DAG heads from ${headsPath}:`, error);
+      appContext.dagHeads = [];
+    }
+  }
+}
+
 export async function startNode(wallet, datastorePath, options = {}) {
+  await loadDagHeads(datastorePath);
+
   logger.info('Core: Initializing P2P node...');
   appContext.reputationManager = new ReputationManager();
   appContext.pubsubRateLimiter = new RateLimiter(0.5, 2);

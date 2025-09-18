@@ -56,6 +56,18 @@ async function main() {
       : null;
     const node = await startNode(wallet, datastorePath, { directPeerInfo });
 
+    process.on('SIGINT', async () => {
+      logger.info('\nShutting down node...');
+      if (appContext.node) {
+        // Save the state before stopping
+        await saveDagHeads(datastorePath);
+        await appContext.node.stop();
+      }
+      if (rl) rl.close();
+      if (appContext.pinManager) await appContext.pinManager.close();
+      process.exit(0);
+    });
+
     if (!isFork) {
       const addresses = node.libp2p.getMultiaddrs();
       logger.prod('\nListening addresses:');
@@ -90,14 +102,6 @@ async function main() {
       }
     }
     // IPC logic for forked processes would go here...
-
-    process.on('SIGINT', async () => {
-      logger.info('\nShutting down node...');
-      if (rl) rl.close();
-      if (appContext.node) await appContext.node.stop();
-      if (appContext.pinManager) await appContext.pinManager.close();
-      process.exit(0);
-    });
 
   } catch (error) {
     logger.error('Fatal Error:', error);

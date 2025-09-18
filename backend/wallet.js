@@ -8,7 +8,7 @@ import { TextEncoder } from 'util';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { randomBytes as randomBytesNoble } from '@noble/hashes/utils';
 
-async function loadWalletFromFile(filePath, options = {}) {
+export async function loadWalletFromFile(filePath, options = {}) {
   const { quiet = false } = options;
   if (!quiet) logger.debug(`Attempting to load wallet from Keystore: ${filePath}`);
 

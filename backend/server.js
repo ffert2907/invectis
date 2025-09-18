@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import { mkdir, readdir, readFile, writeFile } from 'fs/promises'
 import { logger } from './config.js'
 import { loadWalletFromFile, createWallet } from './wallet.js'
-import { startNode, appContext, applyAutomaticBonus, startTransactionQueueProcessor, createAndSetAttestation } from './core.js'
+import { startNode, appContext, applyAutomaticBonus, startTransactionQueueProcessor, createAndSetAttestation, saveDagHeads, loadDagHeads } from './core.js'
 import { VECTORS } from './vectors.js'
 import {
   signTransaction,
@@ -57,13 +57,15 @@ async function main() {
   logger.prod('Starting in Server Mode...');
 
   const dataDir = path.join(__dirname, 'data');
-  const datastorePath = path.join(dataDir, 'helia_server');
   await mkdir(dataDir, { recursive: true });
 
   // Determine which wallet to load on startup
   const lastActiveWallet = await getLastActiveWallet();
   const walletToLoad = lastActiveWallet || WALLET_FILE;
   const walletFile = path.join(dataDir, walletToLoad);
+
+  // The datastore path is now derived from the wallet file, like in index.js
+  const datastorePath = path.join(dataDir, `helia_${path.basename(walletToLoad, '.dat')}`);
 
   // Try to load the determined wallet and start the node at boot.
   try {
@@ -267,22 +269,24 @@ async function main() {
       // Load the new wallet from file
       const newWallet = await loadWalletFromFile(walletFile);
 
-      // Case 1: Node is not running yet. Start it with the selected wallet.
-      if (!appContext.node) {
-        logger.info(`No active node found. Starting node with wallet: ${walletId}`);
-        const datastorePath = path.join(dataDir, 'helia_server');
-        await startNode(newWallet, datastorePath);
-        logger.prod(`✅ Wallet ${walletId} activated and P2P node started.`);
+      // Stop the current node and save its state before activating the new one.
+      if (appContext.node) {
+        logger.info('Node is running. Stopping and saving state before wallet swap...');
+        const oldWalletId = await getLastActiveWallet();
+        if (oldWalletId) {
+            const oldDatastorePath = path.join(dataDir, `helia_${path.basename(oldWalletId, '.dat')}`);
+            await saveDagHeads(oldDatastorePath);
+        }
+        await appContext.node.stop();
+        if (appContext.pinManager) await appContext.pinManager.close();
+        logger.info('Old node stopped and state saved.');
       }
-      // Case 2: Node is already running. Hot-swap the wallet.
-      else {
-        logger.info(`Node is running. Hot-swapping wallet to: ${walletId}`);
-        // 1. Update wallet in context
-        appContext.wallet = newWallet;
-        // 2. Re-create and set the attestation for the new wallet
-        appContext.attestation = await createAndSetAttestation(appContext.node, newWallet);
-        logger.prod(`✅ Wallet switched to ${walletId} on running node.`);
-      }
+
+      // Start a new node with the selected wallet.
+      logger.info(`Activating node with wallet: ${walletId}`);
+      const newDatastorePath = path.join(dataDir, `helia_${path.basename(walletId, '.dat')}`);
+      await startNode(newWallet, newDatastorePath); // This will load the new wallet's DAG heads
+      logger.prod(`✅ Wallet ${walletId} activated and P2P node started.`);
 
       // In both cases, save the activated wallet as the last active one
       await saveLastActiveWallet(walletId);
@@ -416,10 +420,10 @@ async function main() {
       const peerId = appContext.node.libp2p.peerId.toString();
       const localWsAddress = allAddresses.find(a => a.includes('/ip4/127.0.0.1/') && a.includes('/ws'));
       if (localWsAddress) {
-        const fullAddress = `${localWsAddress}/p2p/${peerId}`;
+        // The localWsAddress should already be the full, encapsulated address
         logger.prod('------------------------------------------------------------------');
         logger.prod('To connect a local client, use this full multiaddress:');
-        logger.prod(fullAddress);
+        logger.prod(localWsAddress);
         logger.prod('------------------------------------------------------------------');
       }
     }
@@ -428,11 +432,15 @@ async function main() {
   // Graceful shutdown
   process.on('SIGINT', async () => {
     logger.info('\nSIGINT received. Shutting down server and P2P node...');
-    server.close();
     if (appContext.node) {
+      await saveDagHeads(datastorePath);
       await appContext.node.stop();
     }
-    process.exit(0);
+    if (appContext.pinManager) await appContext.pinManager.close();
+    server.close(() => {
+      logger.info('Server closed.');
+      process.exit(0);
+    });
   });
 }
 
