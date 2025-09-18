@@ -1,4 +1,4 @@
-import { createIndexstore } from './adapters/storage.js'
+import { LevelDatastore } from 'datastore-level'
 import { logger } from './config.js'
 import { CID } from 'multiformats/cid'
 import { Key } from 'interface-datastore'
@@ -13,7 +13,7 @@ export class PinManager {
    */
   constructor(datastorePath) {
     this.datastorePath = datastorePath;
-    this.datastore = createIndexstore(this.datastorePath);
+    this.datastore = new LevelDatastore(this.datastorePath);
   }
 
   /**

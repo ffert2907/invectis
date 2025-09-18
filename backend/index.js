@@ -95,16 +95,14 @@ async function main() {
     } else {
       // In console mode, run the interactive CLI
       const addresses = node.libp2p.getMultiaddrs();
-      const peerId = node.libp2p.peerId.toString();
       logger.prod('\nListening addresses:')
-      const fullAddresses = addresses.map(addr => `${addr.toString()}/p2p/${peerId}`);
-      fullAddresses.forEach(addr => logger.prod(addr))
+      addresses.forEach(addr => logger.prod(addr.toString()))
 
        if (!peerAddress) {
         try {
-          const wsAddress = fullAddresses.find(addr => addr.includes('/ws'))
+          const wsAddress = addresses.find(addr => addr.toString().includes('/ws'))
           if (wsAddress) {
-            await clipboardy.write(wsAddress)
+            await clipboardy.write(wsAddress.toString())
             logger.prod('\n✅ Full WebSocket multiaddress copied to clipboard!')
           }
         } catch (error) {
