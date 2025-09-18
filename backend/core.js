@@ -84,27 +84,30 @@ export async function loadDagHeads(datastorePath) {
 }
 
 export async function startNode(wallet, datastorePath, options = {}) {
-  await loadDagHeads(datastorePath);
-
   logger.info('Core: Initializing P2P node...');
   appContext.reputationManager = new ReputationManager();
   appContext.pubsubRateLimiter = new RateLimiter(0.5, 2);
   logger.info('Core: Security components initialized.');
+
+  // Use a sibling directory for the pin database to avoid conflicts.
+  const pinDbPath = `${datastorePath}_pins`;
 
   const node = await createNode(datastorePath, appContext.reputationManager, options);
   appContext.node = node;
   appContext.wallet = wallet;
   appContext.j = json(node);
 
-  // Start the core node first, as it initializes the main datastore.
+  const pinManager = new PinManager(pinDbPath);
+  appContext.pinManager = pinManager;
+
+  // Start the node and open the pin manager's database.
   await node.start();
   logger.prod('Core: Node started successfully');
-
-  // Now that the main datastore is open, initialize secondary components.
-  const pinDbPath = path.join(datastorePath, 'pins');
-  appContext.pinManager = new PinManager(pinDbPath);
-  await appContext.pinManager.open();
+  await pinManager.open();
   logger.info('Core: Pin manager initialized.');
+
+  // Now that datastores are open and directories exist, load the ledger state.
+  await loadDagHeads(datastorePath);
 
   appContext.attestation = await createAndSetAttestation(node, wallet);
   node.setHeadProvider(() => appContext.dagHeads.length > 0 ? appContext.dagHeads[appContext.dagHeads.length - 1] : null);
