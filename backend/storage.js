@@ -1,4 +1,4 @@
-import { LevelDatastore } from 'datastore-level'
+import { createIndexstore } from './adapters/storage.js'
 import { logger } from './config.js'
 import { CID } from 'multiformats/cid'
 import { Key } from 'interface-datastore'
@@ -13,14 +13,17 @@ export class PinManager {
    */
   constructor(datastorePath) {
     this.datastorePath = datastorePath;
-    this.datastore = new LevelDatastore(this.datastorePath);
+    this.datastore = null; // Will be initialized in open()
   }
 
   /**
-   * Opens the datastore connection. Must be called before any other methods.
+   * Creates and opens the datastore connection. Must be called before any other methods.
    */
   async open() {
-    await this.datastore.open();
+    if (this.datastore) {
+      return;
+    }
+    this.datastore = await createIndexstore(this.datastorePath);
     logger.info(`PinManager: Pin database opened at ${this.datastorePath}`);
   }
 
