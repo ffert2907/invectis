@@ -1,4 +1,3 @@
-import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { createKeystore } from './adapters/keystore.js';
 import { logger } from './config.js';
@@ -9,27 +8,19 @@ import { TextEncoder } from 'util';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { randomBytes as randomBytesNoble } from '@noble/hashes/utils';
 
-/**
- * Loads a wallet from a file.
- * @param {string} filePath - Path to the wallet file.
- * @param {object} [options] - Optional settings.
- * @param {boolean} [options.quiet=false] - If true, suppress verbose logs.
- * @returns {Promise<{privateKey: import('@libp2p/interface-keys').PrivateKey, accountType: string, country: string, city: string, nullifier: string}>} - Wallet data.
- */
-export async function loadWalletFromFile(filePath, options = {}) {
+async function loadWalletFromFile(filePath, options = {}) {
   const { quiet = false } = options;
+  if (!quiet) logger.debug('Attempting to load wallet from:', filePath);
 
-  if (!quiet) {
-    logger.debug('Attempting to load wallet from:', filePath);
-  }
   const keystore = createKeystore(path.dirname(filePath));
-  const encryptedData = await keystore.loadKey(path.basename(filePath));
-  if (!encryptedData) {
+  const decryptedData = await keystore.loadKey(path.basename(filePath));
+
+  if (!decryptedData) {
       const error = new Error(`Wallet not found at path: ${filePath}`);
       error.code = 'ENOENT';
       throw error;
   }
-  const walletData = JSON.parse(encryptedData.toString('utf8'));
+  const walletData = JSON.parse(decryptedData.toString('utf8'));
 
   if (walletData.version !== '1.0' || !walletData.privateKey) {
     throw new Error('Invalid or outdated wallet format.');
@@ -40,49 +31,34 @@ export async function loadWalletFromFile(filePath, options = {}) {
   const privateKey = await libp2pCrypto.keys.privateKeyFromProtobuf(marshalledPrivKey);
   const peerId = await peerIdFromPrivateKey(privateKey);
 
-  const accountType = walletData.accountType || 'standard';
-  const country = walletData.country;
-  const city = walletData.city;
-  const nullifier = walletData.nullifier; // Changed from nationalIdHash
   let encryptionPrivateKey = walletData.encryptionPrivateKey ? Buffer.from(walletData.encryptionPrivateKey, 'base64') : null;
   let encryptionPublicKey = walletData.encryptionPublicKey ? Buffer.from(walletData.encryptionPublicKey, 'base64') : null;
 
-  // Self-migration for old wallets
   if (!encryptionPrivateKey || !encryptionPublicKey) {
     logger.info(`Wallet at ${filePath} is an older version. Upgrading with new encryption keys...`);
     encryptionPrivateKey = randomBytesNoble(32);
     encryptionPublicKey = secp256k1.getPublicKey(encryptionPrivateKey);
-
     walletData.encryptionPrivateKey = Buffer.from(encryptionPrivateKey).toString('base64');
     walletData.encryptionPublicKey = Buffer.from(encryptionPublicKey).toString('base64');
-
-    await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8');
-    logger.info(`✅ Wallet upgraded and saved to ${filePath}`);
+    const dataToStore = Buffer.from(JSON.stringify(walletData, null, 2));
+    await keystore.saveKey(path.basename(filePath), dataToStore);
+    logger.info(`✅ Wallet upgraded and re-saved to ${filePath}`);
   }
 
-
-  if (!quiet) {
-    logger.info(`✅ Existing wallet loaded (Account Type: ${accountType})`);
-  }
+  if (!quiet) logger.info(`✅ Existing wallet loaded (Account Type: ${walletData.accountType})`);
 
   return {
     privateKey,
     peerId,
-    accountType,
-    country,
-    city,
-    nullifier,
+    accountType: walletData.accountType,
+    country: walletData.country,
+    city: walletData.city,
+    nullifier: walletData.nullifier,
     encryptionPrivateKey,
     encryptionPublicKey
-  }
+  };
 }
 
-/**
- * Initializes or loads a wallet, with interactive creation as a fallback.
- * @param {string} filePath - Path to the wallet file.
- * @param {import('readline').Interface} rl - The readline interface for user input.
- * @returns {Promise<object>} - Wallet data, including the private key.
- */
 export async function initializeWallet(filePath, rl) {
   try {
     return await loadWalletFromFile(filePath);
@@ -93,16 +69,10 @@ export async function initializeWallet(filePath, rl) {
     }
 
     logger.info('No valid wallet found. Starting interactive creation...');
+    if (!rl) throw new Error('Readline interface is required for interactive wallet creation.');
+
     const askQuestion = (query) => new Promise(resolve => rl.question(query, resolve));
-
-    const accountType = await (async () => {
-      let choice;
-      do {
-        choice = await askQuestion('Choose account type (1: Individual, 2: Enterprise): ');
-      } while (choice !== '1' && choice !== '2');
-      return choice === '1' ? 'individual' : 'enterprise';
-    })();
-
+    const accountType = await askQuestion('Choose account type (1: Individual, 2: Enterprise): ') === '1' ? 'individual' : 'enterprise';
     let walletDetails = { accountType };
 
     if (accountType === 'individual') {
@@ -119,62 +89,35 @@ export async function initializeWallet(filePath, rl) {
         const city = await askQuestion('  - City of Operation: ');
         walletDetails = { ...walletDetails, countryOfBirth: country, cityOfBirth: city };
     }
-
     return createWallet(filePath, walletDetails);
   }
 }
 
-/**
- * Creates a new wallet, generating a nullifier for individual accounts.
- * @param {string} filePath - The path to save the wallet file.
- * @param {object} details - The details for the new wallet.
- * @returns {Promise<object>} - The created wallet data, including the private key.
- */
-export async function createWallet(filePath, {
-  accountType,
-  givenName,
-  familyName,
-  dateOfBirth,
-  countryOfBirth,
-  cityOfBirth
-}) {
+export async function createWallet(filePath, details) {
   let nullifier = null;
-  if (accountType === 'individual') {
-    if (!givenName || !familyName || !dateOfBirth || !countryOfBirth || !cityOfBirth) {
+  if (details.accountType === 'individual') {
+    if (!details.givenName || !details.familyName || !details.dateOfBirth || !details.countryOfBirth || !details.cityOfBirth) {
       throw new Error('Missing personal information for individual wallet creation.');
     }
-    nullifier = generateNullifier({
-      givenName,
-      familyName,
-      dateOfBirth,
-      countryOfBirth,
-      cityOfBirth
-    });
+    nullifier = generateNullifier(details);
     logger.info('✅ Nullifier generated for individual account.');
   }
 
   const libp2pCrypto = await import('@libp2p/crypto');
-  // Generate a key
   const generatedKey = await libp2pCrypto.keys.generateKeyPair('Ed25519');
-  // Marshall it to its protobuf format
   const marshalledKey = libp2pCrypto.keys.privateKeyToProtobuf(generatedKey);
-  // Unmarshall it back to a key object. This "round-trip" ensures the key object
-  // has the exact same structure as a key loaded from a file.
   const privateKey = await libp2pCrypto.keys.privateKeyFromProtobuf(marshalledKey);
   const peerId = await peerIdFromPrivateKey(privateKey);
-
-  // Generate a secp256k1 key pair for encryption
   const encryptionPrivateKey = randomBytesNoble(32);
   const encryptionPublicKey = secp256k1.getPublicKey(encryptionPrivateKey);
 
   const walletData = {
     version: '1.0',
     type: 'Ed25519',
-    accountType,
-    country: countryOfBirth,
-    city: cityOfBirth,
+    accountType: details.accountType,
+    country: details.countryOfBirth,
+    city: details.cityOfBirth,
     nullifier,
-    // The base64 version is for saving to disk only.
     privateKey: Buffer.from(marshalledKey).toString('base64'),
     encryptionPrivateKey: Buffer.from(encryptionPrivateKey).toString('base64'),
     encryptionPublicKey: Buffer.from(encryptionPublicKey).toString('base64'),
@@ -185,53 +128,24 @@ export async function createWallet(filePath, {
     const keystore = createKeystore(path.dirname(filePath));
     const dataToStore = Buffer.from(JSON.stringify(walletData, null, 2));
     await keystore.saveKey(path.basename(filePath), dataToStore);
-    logger.info(`✅ New wallet created and saved via KeyStore to ${filePath} (Account Type: ${accountType})`);
+    logger.info(`✅ New wallet created and saved via KeyStore to ${filePath} (Account Type: ${details.accountType})`);
   }
 
-  // Remove the base64 private keys from the data we will merge into the final object.
   delete walletData.privateKey;
   delete walletData.encryptionPrivateKey;
 
-
-  // Return the live, canonical private key object along with the rest of the metadata.
-  return {
-    privateKey, // The actual crypto key object
-    encryptionPrivateKey,
-    encryptionPublicKey,
-    peerId,
-    ...walletData // The rest of the wallet metadata
-  };
+  return { privateKey, encryptionPrivateKey, encryptionPublicKey, peerId, ...walletData };
 }
 
-/**
- * Creates a canonical string representation of a JSON object.
- * Keys are sorted alphabetically to ensure a consistent output.
- * @param {object} object - The object to canonicalize.
- * @returns {string} - A deterministic string representation of the object.
- */
 function canonicalize(object) {
     const sortedObject = {};
-    Object.keys(object).sort().forEach(key => {
-        sortedObject[key] = object[key];
-    });
+    Object.keys(object).sort().forEach(key => { sortedObject[key] = object[key]; });
     return JSON.stringify(sortedObject);
 }
 
-
-/**
- * Creates and signs an attestation that binds a wallet's identity to a node's PeerID.
- * This allows a node to prove it has permission to act on behalf of a wallet for a limited time.
- *
- * @param {import('@libp2p/interface-keys').PrivateKey} walletPrivateKey - The wallet's private key object.
- * @param {import('@libp2p/interface-peer-id').PeerId} walletPeerId - The wallet's full PeerId object.
- * @param {import('@libp2p/interface-peer-id').PeerId} nodePeerId - The PeerID of the node that will use this attestation.
- * @param {number} [ttlSeconds=600] - The time-to-live for the attestation in seconds. Defaults to 10 minutes.
- * @returns {Promise<{attestation: object, signature: string}>} The attestation object and its base64-encoded signature.
- */
 export async function signAttestation(wallet, nodePeerId, ttlSeconds = 600) {
     const issuedAt = new Date();
     const expiresAt = new Date(issuedAt.getTime() + ttlSeconds * 1000);
-
     const attestation = {
         type: 'wallet-node-attestation',
         version: '1',
@@ -242,17 +156,11 @@ export async function signAttestation(wallet, nodePeerId, ttlSeconds = 600) {
         issuedAt: issuedAt.toISOString(),
         expiresAt: expiresAt.toISOString(),
         nonce: randomUUID(),
-        capabilities: ['relay', 'indexing'] // Example capabilities from design
+        capabilities: ['relay', 'indexing']
     };
-
     const payloadToSign = canonicalize(attestation);
     const signatureBytes = await wallet.privateKey.sign(new TextEncoder().encode(payloadToSign));
     const signature = Buffer.from(signatureBytes).toString('base64');
-
     logger.info(`✅ Attestation signed for Node ${nodePeerId.toString()}`);
-
-    return {
-        attestation,
-        signature
-    };
+    return { attestation, signature };
 }
