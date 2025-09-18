@@ -24,7 +24,7 @@ export class PinManager {
       return;
     }
     this.datastore = await createIndexstore(this.datastorePath);
-    logger.info(`PinManager: Pin database opened at ${this.datastorePath}`);
+    // The logger message from the adapter is sufficient, no need to log twice.
   }
 
   /**

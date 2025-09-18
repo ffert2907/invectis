@@ -1,4 +1,6 @@
 import { readFile, writeFile } from 'fs/promises';
+import path from 'path';
+import { createKeystore } from './adapters/keystore.js';
 import { logger } from './config.js';
 import { generateNullifier } from './identity.js';
 import { peerIdFromPrivateKey } from '@libp2p/peer-id';
@@ -20,8 +22,14 @@ export async function loadWalletFromFile(filePath, options = {}) {
   if (!quiet) {
     logger.debug('Attempting to load wallet from:', filePath);
   }
-  const data = await readFile(filePath, 'utf8');
-  const walletData = JSON.parse(data);
+  const keystore = createKeystore(path.dirname(filePath));
+  const encryptedData = await keystore.loadKey(path.basename(filePath));
+  if (!encryptedData) {
+      const error = new Error(`Wallet not found at path: ${filePath}`);
+      error.code = 'ENOENT';
+      throw error;
+  }
+  const walletData = JSON.parse(encryptedData.toString('utf8'));
 
   if (walletData.version !== '1.0' || !walletData.privateKey) {
     throw new Error('Invalid or outdated wallet format.');
@@ -174,8 +182,10 @@ export async function createWallet(filePath, {
   };
 
   if (filePath) {
-    await writeFile(filePath, JSON.stringify(walletData, null, 2), 'utf8');
-    logger.info(`✅ New wallet created and saved to ${filePath} (Account Type: ${accountType})`);
+    const keystore = createKeystore(path.dirname(filePath));
+    const dataToStore = Buffer.from(JSON.stringify(walletData, null, 2));
+    await keystore.saveKey(path.basename(filePath), dataToStore);
+    logger.info(`✅ New wallet created and saved via KeyStore to ${filePath} (Account Type: ${accountType})`);
   }
 
   // Remove the base64 private keys from the data we will merge into the final object.

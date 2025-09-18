@@ -95,14 +95,16 @@ async function main() {
     } else {
       // In console mode, run the interactive CLI
       const addresses = node.libp2p.getMultiaddrs();
+      const peerId = node.libp2p.peerId.toString();
       logger.prod('\nListening addresses:')
-      addresses.forEach(addr => logger.prod(addr.toString()))
+      const fullAddresses = addresses.map(addr => `${addr.toString()}/p2p/${peerId}`);
+      fullAddresses.forEach(addr => logger.prod(addr))
 
        if (!peerAddress) {
         try {
-          const wsAddress = addresses.find(addr => addr.toString().includes('/ws'))
+          const wsAddress = fullAddresses.find(addr => addr.includes('/ws'))
           if (wsAddress) {
-            await clipboardy.write(wsAddress.toString())
+            await clipboardy.write(wsAddress)
             logger.prod('\n✅ Full WebSocket multiaddress copied to clipboard!')
           }
         } catch (error) {
@@ -116,6 +118,8 @@ async function main() {
           const ma = multiaddr(peerAddress)
           await appContext.node.libp2p.dial(ma)
           logger.prod('✅ Successfully connected to peer.')
+          logger.info('Waiting 2 seconds for network to stabilize...')
+          await new Promise(resolve => setTimeout(resolve, 2000))
         } catch (error) {
           logger.error('Connection error:', error.message)
           logger.info('Node will continue to run in listening mode.')
@@ -343,7 +347,7 @@ function runInteractiveCLI(peerAddress) {
             logger.info('✅ Transaction published to the network!')
           }
         } catch (error) {
-          logger.error('Error sending transaction:', error)
+          logger.error('Error sending transaction:', error.message)
         }
         askForTransaction()
       })

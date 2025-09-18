@@ -91,12 +91,14 @@ export async function createNode(datastorePath, reputationManager, options = {})
       }),
       ping: ping()
     },
-    peerDiscovery: [
-        bootstrap({
-          list: process.env.NODE_ENV === 'test' ? [] : BOOTSTRAP_NODES,
-          timeout: 1000, // in ms,
-        })
-    ],
+    peerDiscovery: process.env.NODE_ENV === 'test'
+      ? []
+      : [
+          bootstrap({
+            list: BOOTSTRAP_NODES,
+            timeout: 1000, // in ms,
+          })
+        ],
     connectionGater: createConnectionGater(reputationManager),
     connectionManager: {
       minConnections: 0,
