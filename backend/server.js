@@ -268,32 +268,16 @@ async function main() {
         return res.status(200).json({ message: 'Wallet already active.' });
       }
 
-      // 1. Save state of the currently running node
-      if (appContext.node) {
-        const oldDatastorePath = path.join(dataDir, `helia_${path.basename(oldWalletId, '.dat')}`);
-        logger.info(`Saving state for ${oldWalletId}...`);
-        await saveDagHeads(oldDatastorePath);
-
-        logger.info('Stopping current node...');
-        await appContext.node.stop();
-        if (appContext.pinManager) await appContext.pinManager.close();
-      }
-
-      // 2. Introduce a delay to allow file locks to be released
-      logger.info('Waiting for 500ms before starting new node...');
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // 3. Load the new wallet and start the new node
-      logger.info(`Loading new wallet ${newWalletId}...`);
-      const newWalletFile = path.join(dataDir, newWalletId);
-      const newWallet = await loadWalletFromFile(newWalletFile);
-      const newDatastorePath = path.join(dataDir, `helia_${path.basename(newWalletId, '.dat')}`);
-
-      await startNode(newWallet, newDatastorePath); // startNode now loads the new DAG heads
-
+      // Set the new wallet that should be loaded on next startup
       await saveLastActiveWallet(newWalletId);
-      logger.prod(`✅ Wallet ${newWalletId} activated and P2P node started.`);
-      res.status(200).json({ message: `Wallet ${newWalletId} activated successfully.` });
+
+      // Respond to the client immediately
+      res.status(202).json({ message: `Activation of wallet ${newWalletId} initiated. Server is restarting.` });
+
+      // Trigger a graceful shutdown, saving the state of the OLD wallet.
+      logger.info(`Wallet switch to ${newWalletId} requested. Shutting down for restart.`);
+      const oldDatastorePath = oldWalletId ? path.join(dataDir, `helia_${path.basename(oldWalletId, '.dat')}`) : null;
+      await shutdown(oldDatastorePath);
 
     } catch (error) {
       logger.error(`Failed to activate wallet ${newWalletId}:`, error);
@@ -422,32 +406,32 @@ async function main() {
       const peerId = appContext.node.libp2p.peerId.toString();
       const localWsAddress = allAddresses.find(a => a.includes('/ip4/127.0.0.1/') && a.includes('/ws'));
       if (localWsAddress) {
-        const fullAddress = `${localWsAddress}/p2p/${peerId}`;
+        // The user's log shows the peer ID is duplicated, so we assume it's already in localWsAddress
         logger.prod('------------------------------------------------------------------');
         logger.prod('To connect a local client, use this full multiaddress:');
-        logger.prod(fullAddress);
+        logger.prod(localWsAddress);
         logger.prod('------------------------------------------------------------------');
       }
     }
   });
 
   // Graceful shutdown
-  process.on('SIGINT', async () => {
-    logger.info('\nSIGINT received. Shutting down server and P2P node...');
+  const shutdown = async (path_to_save) => {
+    logger.info('Shutting down server and P2P node...');
     if (appContext.node) {
-        const lastWallet = await getLastActiveWallet();
-        if (lastWallet) {
-            const currentDatastorePath = path.join(dataDir, `helia_${path.basename(lastWallet, '.dat')}`);
-            await saveDagHeads(currentDatastorePath);
-        }
-        await appContext.node.stop();
+      if (path_to_save) {
+        await saveDagHeads(path_to_save);
+      }
+      await appContext.node.stop();
     }
     if (appContext.pinManager) await appContext.pinManager.close();
     server.close(() => {
       logger.info('Server closed.');
       process.exit(0);
     });
-  });
+  };
+
+  process.on('SIGINT', () => shutdown(datastorePath));
 }
 
 main()

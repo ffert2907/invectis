@@ -9,6 +9,30 @@ import SendComponent from './Send';
 import BottomNav from './BottomNav';
 import LanguageSelector from './LanguageSelector';
 
+const fetchWithRetry = async (url, options, retries = 5, delay = 1000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options);
+      // Don't retry on client-side errors (4xx), but do on server-side (5xx) or network errors
+      if (response.status >= 400 && response.status < 500) {
+        return response; // Let the caller handle client errors
+      }
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+      return response; // Success
+    } catch (error) {
+      if (i < retries - 1) {
+        console.warn(`Fetch failed for ${url}. Retrying in ${delay}ms...`, error.message);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        console.error(`All retries failed for ${url}.`);
+        throw error; // Rethrow the last error
+      }
+    }
+  }
+};
+
 const AccountIcon = ({ type, className }) => {
   if (type === 'individual') {
     return <User className={className} />;
@@ -63,7 +87,7 @@ function App() {
 
   const fetchWallets = async () => {
     try {
-      const response = await fetch('http://localhost:3000/wallets');
+      const response = await fetchWithRetry('http://localhost:3000/wallets');
       if (response.ok) {
         const fetchedWallets = await response.json();
         setWallets(fetchedWallets);
@@ -78,7 +102,7 @@ function App() {
   useEffect(() => {
     const initialFetch = async () => {
       try {
-        const response = await fetch('http://localhost:3000/wallets');
+        const response = await fetchWithRetry('http://localhost:3000/wallets');
         if (response.ok) {
           const fetchedWallets = await response.json();
           setWallets(fetchedWallets);
@@ -96,7 +120,7 @@ function App() {
 
     const interval = setInterval(async () => {
       try {
-        const response = await fetch('http://localhost:3000/status');
+        const response = await fetchWithRetry('http://localhost:3000/status');
         if (response.ok) {
           const newStatus = await response.json();
           if (newStatus.status === 'ACTIVE') {
@@ -148,7 +172,7 @@ function App() {
       return;
     }
     try {
-      const response = await fetch(`http://localhost:3000/wallets/${peerId}/transactions`);
+      const response = await fetchWithRetry(`http://localhost:3000/wallets/${peerId}/transactions`);
       if (response.ok) {
         const fetchedTransactions = await response.json();
         setTransactions(fetchedTransactions);
@@ -174,7 +198,7 @@ function App() {
   useEffect(() => {
     const fetchVectors = async () => {
       try {
-        const response = await fetch('http://localhost:3000/vectors');
+        const response = await fetchWithRetry('http://localhost:3000/vectors');
         if (response.ok) {
           const fetchedVectors = await response.json();
           setVectors(fetchedVectors);
@@ -346,7 +370,7 @@ function App() {
 
   const handleWalletSelection = async (walletId) => {
     try {
-      const response = await fetch('http://localhost:3000/wallets/activate', {
+      const response = await fetchWithRetry('http://localhost:3000/wallets/activate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ walletId }),
@@ -359,7 +383,7 @@ function App() {
         setCurrentView('dashboard');
         // Manually trigger a wallet and status fetch to speed up UI update
         fetchWallets();
-        const statusRes = await fetch('http://localhost:3000/status');
+        const statusRes = await fetchWithRetry('http://localhost:3000/status');
         if (statusRes.ok) {
           const newStatus = await statusRes.json();
            if (newStatus.status === 'ACTIVE') {
@@ -650,7 +674,7 @@ function App() {
                 const walletData = await window.electronAPI.readFileContent(filePath);
                 if (walletData) {
                   try {
-                    const response = await fetch('http://localhost:3000/wallets/import', {
+                  const response = await fetchWithRetry('http://localhost:3000/wallets/import', {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
@@ -778,7 +802,7 @@ function App() {
         <button
           onClick={async () => {
             try {
-              const response = await fetch('http://localhost:3000/wallets', {
+              const response = await fetchWithRetry('http://localhost:3000/wallets', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
