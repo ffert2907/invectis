@@ -343,7 +343,7 @@ function runInteractiveCLI(peerAddress) {
             logger.info('✅ Transaction published to the network!')
           }
         } catch (error) {
-          logger.error('Error sending transaction:', error.message)
+          logger.error('Error sending transaction:', error)
         }
         askForTransaction()
       })
