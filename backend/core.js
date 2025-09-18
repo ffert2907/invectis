@@ -53,15 +53,20 @@ export async function startNode(wallet, datastorePath) {
   appContext.pubsubRateLimiter = new RateLimiter(0.5, 2);
   logger.info('Core: Security components initialized.');
 
-  const pinDbPath = path.join(datastorePath, 'pins');
-  appContext.pinManager = new PinManager(pinDbPath);
-  await appContext.pinManager.open();
-  logger.info('Core: Pin manager initialized.');
-
   const node = await createNode(datastorePath, appContext.reputationManager);
   appContext.node = node;
   appContext.wallet = wallet;
   appContext.j = json(node);
+
+  // Start the core node first, as it initializes the main datastore.
+  await node.start();
+  logger.prod('Core: Node started successfully');
+
+  // Now that the main datastore is open, initialize secondary components.
+  const pinDbPath = path.join(datastorePath, 'pins');
+  appContext.pinManager = new PinManager(pinDbPath);
+  await appContext.pinManager.open();
+  logger.info('Core: Pin manager initialized.');
 
   appContext.attestation = await createAndSetAttestation(node, wallet);
   node.setHeadProvider(() => appContext.dagHeads.length > 0 ? appContext.dagHeads[appContext.dagHeads.length - 1] : null);
@@ -83,9 +88,6 @@ export async function startNode(wallet, datastorePath) {
 
   logger.prod(`Core: Wallet ID: ${wallet.peerId.toString()}`);
   logger.prod(`Core: Node ID:   ${node.libp2p.peerId.toString()}`);
-
-  await node.start();
-  logger.prod('Core: Node started successfully');
 
   await node.libp2p.services.pubsub.subscribe(GLOBAL_LEDGER_TOPIC);
   logger.prod(`Core: Subscribed to topic: ${GLOBAL_LEDGER_TOPIC}`);
