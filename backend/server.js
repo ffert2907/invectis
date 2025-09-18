@@ -257,25 +257,28 @@ async function main() {
 
   // POST /wallets/activate
   app.post('/wallets/activate', async (req, res) => {
-    const { walletId } = req.body;
-    if (!walletId) {
+    const { walletId: newWalletId } = req.body;
+    if (!newWalletId) {
       return res.status(400).json({ error: 'walletId is required' });
     }
 
     try {
-      // Set the next wallet to be activated
-      await saveLastActiveWallet(walletId);
+      const oldWalletId = await getLastActiveWallet();
+      const oldDatastorePath = oldWalletId ? path.join(dataDir, `helia_${path.basename(oldWalletId, '.dat')}`) : null;
+
+      // Set the new wallet that should be loaded on next startup
+      await saveLastActiveWallet(newWalletId);
 
       // Respond to the client immediately
-      res.status(202).json({ message: `Activation of wallet ${walletId} initiated. Server is restarting.` });
+      res.status(202).json({ message: `Activation of wallet ${newWalletId} initiated. Server is restarting.` });
 
-      // Trigger a graceful shutdown. The process manager will restart the server.
-      logger.info(`Wallet switch to ${walletId} requested. Shutting down for restart.`);
-      await shutdown();
+      // Trigger a graceful shutdown, saving the state of the OLD wallet.
+      logger.info(`Wallet switch to ${newWalletId} requested. Shutting down for restart.`);
+      await shutdown(oldDatastorePath);
 
     } catch (error) {
-      logger.error(`Failed to activate wallet ${walletId}:`, error);
-      res.status(500).json({ error: `Failed to activate wallet ${walletId}`, details: error.message });
+      logger.error(`Failed to activate wallet ${newWalletId}:`, error);
+      res.status(500).json({ error: `Failed to activate wallet ${newWalletId}`, details: error.message });
     }
   });
 
@@ -400,23 +403,21 @@ async function main() {
       const peerId = appContext.node.libp2p.peerId.toString();
       const localWsAddress = allAddresses.find(a => a.includes('/ip4/127.0.0.1/') && a.includes('/ws'));
       if (localWsAddress) {
-        const fullAddress = `${localWsAddress}/p2p/${peerId}`;
+        // Based on user logs, localWsAddress already includes the peerId.
         logger.prod('------------------------------------------------------------------');
         logger.prod('To connect a local client, use this full multiaddress:');
-        logger.prod(fullAddress);
+        logger.prod(localWsAddress);
         logger.prod('------------------------------------------------------------------');
       }
     }
   });
 
   // Graceful shutdown
-  const shutdown = async () => {
+  const shutdown = async (path_to_save) => {
     logger.info('Shutting down server and P2P node...');
     if (appContext.node) {
-      const lastWallet = await getLastActiveWallet();
-      if (lastWallet) {
-        const currentDatastorePath = path.join(dataDir, `helia_${path.basename(lastWallet, '.dat')}`);
-        await saveDagHeads(currentDatastorePath);
+      if (path_to_save) {
+        await saveDagHeads(path_to_save);
       }
       await appContext.node.stop();
     }
@@ -427,7 +428,7 @@ async function main() {
     });
   };
 
-  process.on('SIGINT', shutdown);
+  process.on('SIGINT', () => shutdown(datastorePath));
 }
 
 main()
