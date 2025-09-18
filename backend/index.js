@@ -89,8 +89,6 @@ async function main() {
           const ma = multiaddr(peerAddress)
           await appContext.node.libp2p.dial(ma)
           logger.prod('✅ Successfully connected to peer.')
-          logger.info('Waiting 2 seconds for network to stabilize...')
-          await new Promise(resolve => setTimeout(resolve, 2000))
           runInteractiveCLI(peerAddress);
         } catch (error) {
           logger.error('Connection error:', error)

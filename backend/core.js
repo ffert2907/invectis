@@ -360,8 +360,24 @@ export async function applyAutomaticBonus(deps = {}) {
       appContext.dagHeads = [...remainingHeads, bonusCid];
 
       const bonusMessageBytes = new TextEncoder().encode(JSON.stringify(signedBonusTransaction));
-      await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, bonusMessageBytes);
-      logger.info('✅ Bonus transaction published to the network!');
+
+      // Retry logic to handle pubsub stabilization
+      const maxRetries = 5;
+      const retryDelay = 1000; // 1 second
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          await appContext.node.libp2p.services.pubsub.publish(GLOBAL_LEDGER_TOPIC, bonusMessageBytes);
+          logger.info('✅ Bonus transaction published to the network!');
+          break; // Success, exit the loop
+        } catch (error) {
+          if (error.message.includes('NoPeersSubscribedToTopic') && i < maxRetries - 1) {
+            logger.warn(`Pubsub topic not ready, retrying in ${retryDelay}ms... (Attempt ${i + 1}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+          } else {
+            throw error; // Re-throw if it's not the specific error or if max retries are reached
+          }
+        }
+      }
     } else {
       logger.info('No automatic daily bonus to add at this time.');
     }
