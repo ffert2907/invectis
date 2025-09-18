@@ -40,6 +40,7 @@ export class PinManager {
 
   async getAllPins() {
     const pins = [];
+    if (!this.datastore) return pins;
     for await (const { key } of this.datastore.query({ prefix: '/pins/' })) {
       const cidString = key.toString().split('/').pop();
       if (cidString) {

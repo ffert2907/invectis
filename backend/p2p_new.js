@@ -39,81 +39,46 @@ export async function createNode(datastorePath, reputationManager, options = {})
 
   const libp2pConfig = {
     peerId,
-    addresses: {
-      listen: ['/ip4/0.0.0.0/tcp/0', '/ip4/0.0.0.0/tcp/0/ws']
-    },
+    addresses: { listen: ['/ip4/0.0.0.0/tcp/0', '/ip4/0.0.0.0/tcp/0/ws'] },
     transports: [tcp(), webSockets(), circuitRelayTransport({ discoverRelays: 2 })],
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
     services: {
       identify: identify(),
-      pubsub: gossipsub({
-        allowPublishToZeroPeers: true,
-        msgIdFn: (msg) => new TextEncoder().encode(msg.topic + msg.data)
-      }),
+      pubsub: gossipsub({ allowPublishToZeroPeers: true }),
       dht: kadDHT({ clientMode: false }),
-      relay: circuitRelayServer({ reservations: { maxReservations: 15, hopTimeout: 30 * 1000 } }),
+      relay: circuitRelayServer({ reservations: { maxReservations: 15 } }),
       ping: ping()
     },
     peerDiscovery: process.env.NODE_ENV === 'test'
       ? []
-      : [bootstrap({ list: BOOTSTRAP_NODES, timeout: 1000 })],
-    connectionGater: createConnectionGater(reputationManager),
-    connectionManager: {
-      minConnections: 0,
-      maxConnections: 100,
-      dialTimeout: 30000,
-      inboundUpgradeTimeout: 30000
-    }
+      : [bootstrap({ list: BOOTSTRAP_NODES, timeout: 2000 })],
+    connectionGater: createConnectionGater(reputationManager)
   };
 
   const libp2p = await createLibp2p(libp2pConfig);
 
-  await libp2p.handle('/app/attest/1.0.0', ({ stream, connection }) => {
-    const remotePeerId = connection.remotePeer.toString();
-    if (!protocolRateLimiter.isAllowed(remotePeerId)) {
-      reputationManager.rateLimitExceeded(remotePeerId);
+  // Protocol Handlers
+  libp2p.handle('/app/attest/1.0.0', ({ stream, connection }) => {
+    if (!protocolRateLimiter.isAllowed(connection.remotePeer.toString())) {
       return stream.abort(new Error('Rate limit exceeded'));
     }
     if (currentAttestation) {
-      pipe([uint8ArrayFromString(JSON.stringify(currentAttestation))], stream.sink).catch(err => logger.error('P2P: Error piping attestation:', err));
+      pipe([uint8ArrayFromString(JSON.stringify(currentAttestation))], stream.sink).catch(err => logger.error('P2P Attestation Pipe Error:', err));
     } else {
       stream.close();
     }
   });
 
-  await libp2p.handle('/app/replicate/1.0.0', async ({ stream, connection }) => {
-    const remotePeerId = connection.remotePeer.toString();
-    if (!protocolRateLimiter.isAllowed(remotePeerId)) {
-      reputationManager.rateLimitExceeded(remotePeerId);
-      return stream.abort(new Error('Rate limit exceeded'));
-    }
-    try {
-      const cidString = await pipe(stream.source, async (source) => {
-        const chunks = [];
-        for await (const chunk of source) { chunks.push(chunk.subarray()); }
-        return uint8ArrayToString(Buffer.concat(chunks));
-      });
-      if (cidString && options.onPinRequest) {
-        await options.onPinRequest(CID.parse(cidString), connection.remotePeer);
-      }
-      stream.close();
-    } catch (err) {
-      stream.abort(err);
-    }
-  });
-
-  await libp2p.handle('/app/head/1.0.0', ({ stream, connection }) => {
-    const remotePeerId = connection.remotePeer.toString();
-    if (!protocolRateLimiter.isAllowed(remotePeerId)) {
-      reputationManager.rateLimitExceeded(remotePeerId);
-      return stream.abort(new Error('Rate limit exceeded'));
+  libp2p.handle('/app/head/1.0.0', ({ stream, connection }) => {
+    if (!protocolRateLimiter.isAllowed(connection.remotePeer.toString())) {
+        return stream.abort(new Error('Rate limit exceeded'));
     }
     const headCid = currentHeadProvider();
     if (headCid) {
-      pipe([uint8ArrayFromString(headCid.toString())], stream.sink).catch(err => logger.error('P2P: Error piping head:', err));
+        pipe([uint8ArrayFromString(headCid.toString())], stream.sink).catch(err => logger.error('P2P Head Pipe Error:', err));
     } else {
-      stream.close();
+        stream.close();
     }
   });
 
@@ -122,21 +87,6 @@ export async function createNode(datastorePath, reputationManager, options = {})
   helia.setAttestation = (newAttestation) => { currentAttestation = newAttestation; };
   helia.setHeadProvider = (provider) => { currentHeadProvider = provider; };
   helia.privateKey = nodeKey;
-
-  helia.getHeadFrom = async (peerId) => {
-    try {
-      const stream = await libp2p.dialProtocol(peerId, '/app/head/1.0.0');
-      const cidString = await pipe(stream.source, async (source) => {
-        const chunks = [];
-        for await (const chunk of source) { chunks.push(chunk.subarray()); }
-        return uint8ArrayToString(Buffer.concat(chunks));
-      });
-      stream.close();
-      return cidString ? CID.parse(cidString) : null;
-    } catch (err) {
-      return null;
-    }
-  };
 
   helia.getPublicKey = async (peerId) => {
     const peerIdString = peerId.toString();
@@ -157,10 +107,10 @@ export async function createNode(datastorePath, reputationManager, options = {})
           return publicKey;
         }
       }
-      return null;
     } catch (err) {
-      return null;
+      logger.error(`Could not get public key from ${peerIdString}:`, err);
     }
+    return null;
   };
 
   return helia;

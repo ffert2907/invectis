@@ -9,12 +9,10 @@ class DatastoreTypeWrapper {
     constructor(datastore) {
         this.store = datastore;
     }
-
     async get(key) {
         const value = await this.store.get(key);
         return Uint8Array.from(value);
     }
-
     put(key, val) { return this.store.put(key, val); }
     has(key) { return this.store.has(key); }
     delete(key) { return this.store.delete(key); }
@@ -25,40 +23,25 @@ class DatastoreTypeWrapper {
 }
 
 function detectEnvironment() {
-  if (typeof window === 'undefined') {
-    return 'node';
-  }
-  return 'browser';
+  return typeof window === 'undefined' ? 'node' : 'browser';
 }
 
-/**
- * Creates, opens, and wraps a blockstore instance.
- * @param {string} path
- * @returns {Promise<DatastoreTypeWrapper | MemoryDatastore>}
- */
-export async function createBlockstore(path) {
-  const env = detectEnvironment();
-  if (env === 'node') {
+async function createNodeDatastore(path) {
     const store = new LevelDatastore(path);
     await store.open();
     return new DatastoreTypeWrapper(store);
+}
+
+export async function createBlockstore(path) {
+  if (detectEnvironment() === 'node') {
+    return createNodeDatastore(path);
   }
-  // For browser or other environments
   return new MemoryDatastore();
 }
 
-/**
- * Creates, opens, and wraps an index store instance.
- * @param {string} path
- * @returns {Promise<DatastoreTypeWrapper | MemoryDatastore>}
- */
 export async function createIndexstore(path) {
-  const env = detectEnvironment();
-  if (env === 'node') {
-    const store = new LevelDatastore(path);
-    await store.open();
-    return new DatastoreTypeWrapper(store);
+  if (detectEnvironment() === 'node') {
+    return createNodeDatastore(path);
   }
-  // For browser or other environments
   return new MemoryDatastore();
 }
