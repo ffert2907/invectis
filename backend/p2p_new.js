@@ -6,7 +6,7 @@ import { yamux } from '@chainsafe/libp2p-yamux'
 import { identify } from '@libp2p/identify'
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { createHelia } from 'helia'
-import { DatastoreWrapper } from './datastore_wrapper.js'
+import { createBlockstore } from './adapters/storage.js'
 import { keys } from '@libp2p/crypto'
 import { peerIdFromPrivateKey } from '@libp2p/peer-id'
 import { pipe } from 'it-pipe'
@@ -49,7 +49,7 @@ export async function createNode(datastorePath, reputationManager, options = {})
   logger.info(`P2P: Generated ephemeral node PeerId: ${peerId.toString()}`);
 
   // Configure the local database for storage
-  const datastore = new DatastoreWrapper(datastorePath)
+  const datastore = createBlockstore(datastorePath)
 
   // Configure libp2p with WebSockets, DHT, and circuit relay
   const libp2pConfig = {
