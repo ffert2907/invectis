@@ -239,6 +239,15 @@ export async function startNode(wallet, datastorePath) {
         }
       }
 
+      // Before validating, we must ensure we have the transaction's history (its parents).
+      // This is crucial for correctly calculating the author's balance and nonce.
+      if (message.parents && message.parents.length > 0) {
+        logger.info(`Core: New transaction has parents. Fetching their history before validation...`);
+        for (const parentCidString of message.parents) {
+          await fetchDag(CID.parse(parentCidString), appContext.j);
+        }
+      }
+
       const authorPeerId = peerIdFromString(message.author)
       let isValid = await verifyTransaction(message, authorPeerId)
 
@@ -281,14 +290,6 @@ export async function startNode(wallet, datastorePath) {
           const { nullifier } = message.payload;
           appContext.nullifiers.add(nullifier);
           logger.info(`Core: New nullifier registered: ${nullifier}`);
-        }
-
-        // Before adding the new transaction, ensure its parents are fetched
-        if (message.parents && message.parents.length > 0) {
-            logger.info(`Core: New transaction has parents. Fetching their history...`);
-            for (const parentCidString of message.parents) {
-                await fetchDag(CID.parse(parentCidString), appContext.j);
-            }
         }
 
         const cid = await appContext.j.add(message)
